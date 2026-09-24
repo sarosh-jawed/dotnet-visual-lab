@@ -1,7 +1,613 @@
 ﻿@page "/"
+@using DotNetVisualLab.Web.Labs.DependencyInjection
+@inject LifetimeExperimentRunner Runner
 
-<PageTitle>Home</PageTitle>
+<PageTitle>DotNetScope | DI Lifetimes</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="lab-shell">
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">&lt;/&gt;</span>
+            <span>DotNetScope</span>
+        </a>
 
-Welcome to your new app.
+        <div class="topbar-actions">
+            <span class="tech-pill">.NET 10</span>
+            <a class="repo-link"
+               href="https://github.com/sarosh-jawed/dotnet-visual-lab"
+               target="_blank"
+               rel="noreferrer">
+                <svg class="repo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.28-1.29-5.28-5.72 0-1.26.45-2.3 1.19-3.11-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.16 1.19A10.9 10.9 0 0 1 12 6.05c.98 0 1.96.13 2.88.38 2.19-1.5 3.16-1.19 3.16-1.19.63 1.6.23 2.78.11 3.07.74.81 1.19 1.85 1.19 3.11 0 4.44-2.71 5.42-5.29 5.71.42.36.79 1.07.79 2.16v3.26c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z" />
+                </svg>
+                <span>GitHub</span>
+            </a>
+        </div>
+    </header>
+
+    <section class="hero-grid">
+        <div class="hero-copy">
+            <div class="eyebrow">LAB 01 / ASP.NET CORE</div>
+            <h1>
+                Watch dependency injection
+                <span>behave.</span>
+            </h1>
+            <p class="hero-text">
+                Every run resolves real services from the built-in .NET DI container.
+                The GUIDs below are the actual instances created by Transient, Scoped,
+                and Singleton registrations.
+            </p>
+        </div>
+
+        <aside class="run-card">
+            <div>
+                <div class="run-card-label">CURRENT STATE</div>
+                <div class="run-card-value">
+                    @if (_current is null)
+                    {
+                        <span>Waiting for baseline</span>
+                    }
+                    else
+                    {
+                        <span>Request @_current.RunNumber captured</span>
+                    }
+                </div>
+            </div>
+
+            <button class="run-button"
+                    @onclick="RunRequestAsync"
+                    disabled="@(_running || (_current is not null && !PredictionsComplete))">
+                <span class="run-dot"></span>
+                @RunButtonText
+            </button>
+
+            @if (_current is not null && !_running && !PredictionsComplete)
+            {
+                <div class="run-hint" aria-live="polite">
+                    Predict NEW or SAME for all three lifetimes to enable @RunButtonText.
+                </div>
+            }
+
+            @if (_current is not null)
+            {
+                <button class="reset-button" @onclick="Reset" disabled="@_running">
+                    Reset experiment
+                </button>
+            }
+        </aside>
+    </section>
+
+    <section class="prediction-panel">
+        <div class="prediction-copy">
+            <div class="eyebrow">PREDICTION MODE</div>
+
+            @if (_current is null)
+            {
+                <h2>First create a baseline request.</h2>
+                <p>After Request 1, predict which instances survive the next request boundary.</p>
+            }
+            else
+            {
+                <h2>What survives Request @(_current.RunNumber + 1)?</h2>
+                <p>
+                    Predict whether each service gets a <strong>NEW</strong> instance
+                    or keeps the <strong>SAME</strong> instance across the next request.
+                    Answer all three before running it.
+                </p>
+            }
+        </div>
+
+<div class="prediction-buttons">
+    <div class="prediction-choice">
+        <div class="prediction-service">
+            <span class="prediction-dot transient-dot"></span>
+            <span>Transient</span>
+        </div>
+
+        <div class="prediction-options">
+            <button type="button"
+                    class="@PredictionOptionClass(_predictTransientSame, false)"
+                    aria-pressed="@(_predictTransientSame == false)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Transient, false)">
+                NEW
+            </button>
+
+            <button type="button"
+                    class="@PredictionOptionClass(_predictTransientSame, true)"
+                    aria-pressed="@(_predictTransientSame == true)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Transient, true)">
+                SAME
+            </button>
+        </div>
+    </div>
+
+    <div class="prediction-choice">
+        <div class="prediction-service">
+            <span class="prediction-dot scoped-dot"></span>
+            <span>Scoped</span>
+        </div>
+
+        <div class="prediction-options">
+            <button type="button"
+                    class="@PredictionOptionClass(_predictScopedSame, false)"
+                    aria-pressed="@(_predictScopedSame == false)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Scoped, false)">
+                NEW
+            </button>
+
+            <button type="button"
+                    class="@PredictionOptionClass(_predictScopedSame, true)"
+                    aria-pressed="@(_predictScopedSame == true)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Scoped, true)">
+                SAME
+            </button>
+        </div>
+    </div>
+
+    <div class="prediction-choice">
+        <div class="prediction-service">
+            <span class="prediction-dot singleton-dot"></span>
+            <span>Singleton</span>
+        </div>
+
+        <div class="prediction-options">
+            <button type="button"
+                    class="@PredictionOptionClass(_predictSingletonSame, false)"
+                    aria-pressed="@(_predictSingletonSame == false)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Singleton, false)">
+                NEW
+            </button>
+
+            <button type="button"
+                    class="@PredictionOptionClass(_predictSingletonSame, true)"
+                    aria-pressed="@(_predictSingletonSame == true)"
+                    disabled="@(_current is null || _running)"
+                    @onclick="() => SetPrediction(LifetimeKind.Singleton, true)">
+                SAME
+            </button>
+        </div>
+    </div>
+</div>
+    </section>
+
+    <section class="@StageClass">
+        <div class="stage-header">
+            <div>
+                <div class="stage-title">ASP.NET Core DI Container</div>
+                <div class="stage-subtitle">
+                    One fresh IServiceScope per simulated request boundary
+                </div>
+            </div>
+
+            <div class="scope-chip">
+                @if (_running)
+                {
+                    <span>Scope #@_activeRunNumber active</span>
+                }
+                else
+                {
+                    <span>Scope idle</span>
+                }
+            </div>
+        </div>
+
+        <div class="request-track" aria-hidden="true">
+            <span class="request-label">REQUEST</span>
+            <div class="track-line"></div>
+            <div class="request-packet"></div>
+            <span class="container-label">DI CONTAINER</span>
+        </div>
+
+        <div class="service-grid">
+            <article class="service-card transient-card">
+                <div class="service-topline">
+                    <span class="service-registration">AddTransient</span>
+                    <span class="service-rule">new every resolution</span>
+                </div>
+
+                <h3>Transient</h3>
+
+                <div class="resolutions">
+                    <div class="resolution resolve-a">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution A</small>
+                            <code>@Short(_current?.Transient.First)</code>
+                        </div>
+                    </div>
+
+                    <div class="resolution resolve-b">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution B</small>
+                            <code>@Short(_current?.Transient.Second)</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="@WithinBadgeClass(_current?.Transient.SameWithinScope)">
+                    @WithinText(_current?.Transient.SameWithinScope)
+                </div>
+            </article>
+
+            <article class="service-card scoped-card">
+                <div class="service-topline">
+                    <span class="service-registration">AddScoped</span>
+                    <span class="service-rule">one per scope</span>
+                </div>
+
+                <h3>Scoped</h3>
+
+                <div class="resolutions">
+                    <div class="resolution resolve-a">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution A</small>
+                            <code>@Short(_current?.Scoped.First)</code>
+                        </div>
+                    </div>
+
+                    <div class="resolution resolve-b">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution B</small>
+                            <code>@Short(_current?.Scoped.Second)</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="@WithinBadgeClass(_current?.Scoped.SameWithinScope)">
+                    @WithinText(_current?.Scoped.SameWithinScope)
+                </div>
+            </article>
+
+            <article class="service-card singleton-card">
+                <div class="service-topline">
+                    <span class="service-registration">AddSingleton</span>
+                    <span class="service-rule">one for application</span>
+                </div>
+
+                <h3>Singleton</h3>
+
+                <div class="resolutions">
+                    <div class="resolution resolve-a">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution A</small>
+                            <code>@Short(_current?.Singleton.First)</code>
+                        </div>
+                    </div>
+
+                    <div class="resolution resolve-b">
+                        <span class="instance-orb"></span>
+                        <div>
+                            <small>Resolution B</small>
+                            <code>@Short(_current?.Singleton.Second)</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="@WithinBadgeClass(_current?.Singleton.SameWithinScope)">
+                    @WithinText(_current?.Singleton.SameWithinScope)
+                </div>
+            </article>
+        </div>
+
+        @if (_previous is not null && _current is not null)
+        {
+            <div class="boundary-panel" @key="_current.RunNumber">
+                <div class="boundary-heading">
+                    <span>REQUEST @_previous.RunNumber</span>
+                    <div class="boundary-line">
+                        <span class="boundary-x">scope disposed</span>
+                    </div>
+                    <span>REQUEST @_current.RunNumber</span>
+                </div>
+
+                <div class="boundary-results">
+                    <div class="boundary-result transient-boundary">
+                        <div class="boundary-result-top">
+                            <span>Transient</span>
+                            <strong class="@AcrossClass(ActualTransientSame)">
+                                @(ActualTransientSame ? "SAME" : "NEW INSTANCE")
+                            </strong>
+                        </div>
+                        <div class="instance-transition">
+                            <code>@Short(_previous.Transient.First)</code>
+                            <span class="transition-rail" aria-hidden="true"></span>
+                            <code>@Short(_current.Transient.First)</code>
+                        </div>
+                    </div>
+
+                    <div class="boundary-result scoped-boundary">
+                        <div class="boundary-result-top">
+                            <span>Scoped</span>
+                            <strong class="@AcrossClass(ActualScopedSame)">
+                                @(ActualScopedSame ? "SAME" : "DISPOSED / NEW")
+                            </strong>
+                        </div>
+                        <div class="instance-transition">
+                            <code>@Short(_previous.Scoped.First)</code>
+                            <span class="transition-rail" aria-hidden="true"></span>
+                            <code>@Short(_current.Scoped.First)</code>
+                        </div>
+                    </div>
+
+                    <div class="boundary-result singleton-boundary">
+                        <div class="boundary-result-top">
+                            <span>Singleton</span>
+                            <strong class="@AcrossClass(ActualSingletonSame)">
+                                @(ActualSingletonSame ? "SURVIVES" : "NEW")
+                            </strong>
+                        </div>
+                        <div class="instance-transition">
+                            <code>@Short(_previous.Singleton.First)</code>
+                            <span class="transition-rail" aria-hidden="true"></span>
+                            <code>@Short(_current.Singleton.First)</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </section>
+
+    @if (_submittedPrediction is not null && _previous is not null && _current is not null && !_running)
+    {
+        <section class="prediction-result">
+            <div>
+                <div class="eyebrow">YOUR PREDICTION</div>
+                <h2>@PredictionScore / 3 correct</h2>
+            </div>
+
+            <div class="prediction-result-grid">
+                <div class="@PredictionResultClass(_submittedPrediction.TransientSame, ActualTransientSame)">
+                    <span>Transient</span>
+                    <strong>@PredictionResultText(_submittedPrediction.TransientSame, ActualTransientSame)</strong>
+                </div>
+
+                <div class="@PredictionResultClass(_submittedPrediction.ScopedSame, ActualScopedSame)">
+                    <span>Scoped</span>
+                    <strong>@PredictionResultText(_submittedPrediction.ScopedSame, ActualScopedSame)</strong>
+                </div>
+
+                <div class="@PredictionResultClass(_submittedPrediction.SingletonSame, ActualSingletonSame)">
+                    <span>Singleton</span>
+                    <strong>@PredictionResultText(_submittedPrediction.SingletonSame, ActualSingletonSame)</strong>
+                </div>
+            </div>
+        </section>
+    }
+
+    @if (_current is not null)
+    {
+        <section class="learning-grid">
+            <article>
+                <h3>Transient</h3>
+                <p>
+                    The container creates a new object every time the service is resolved.
+                    That is why A and B have different GUIDs inside the same scope.
+                </p>
+            </article>
+
+            <article>
+                <h3>Scoped</h3>
+                <p>
+                    The first resolution creates the object and later resolutions inside
+                    that scope reuse it. A new request scope creates a new object.
+                </p>
+            </article>
+
+            <article>
+                <h3>Singleton</h3>
+                <p>
+                    The first resolution creates one application-wide object.
+                    Every later scope resolves that same object until the app stops.
+                </p>
+            </article>
+        </section>
+    }
+
+    <footer class="lab-footer">
+        <span>DotNetScope / Lab 01</span>
+        <span>Real container instances. No simulated GUIDs.</span>
+    </footer>
+</div>
+
+@code {
+    private LifetimeExperimentResult? _current;
+    private LifetimeExperimentResult? _previous;
+    private PredictionSnapshot? _submittedPrediction;
+
+    private bool? _predictTransientSame;
+    private bool? _predictScopedSame;
+    private bool? _predictSingletonSame;
+
+    private bool PredictionsComplete =>
+        _predictTransientSame.HasValue &&
+        _predictScopedSame.HasValue &&
+        _predictSingletonSame.HasValue;
+    private bool _running;
+    private int _phase;
+    private int _activeRunNumber;
+
+    private enum LifetimeKind
+    {
+        Transient,
+        Scoped,
+        Singleton
+    }
+
+    private sealed record PredictionSnapshot(
+        bool TransientSame,
+        bool ScopedSame,
+        bool SingletonSame);
+
+    private string RunButtonText =>
+        _running
+            ? "Resolving..."
+            : _current is null
+                ? "Run Request 1"
+                : $"Run Request {_current.RunNumber + 1}";
+
+    private string StageClass => $"runtime-stage {(_running ? "is-running" : string.Empty)} phase-{_phase}";
+
+    private bool ActualTransientSame =>
+        _previous is not null &&
+        _current is not null &&
+        _previous.Transient.First == _current.Transient.First;
+
+    private bool ActualScopedSame =>
+        _previous is not null &&
+        _current is not null &&
+        _previous.Scoped.First == _current.Scoped.First;
+
+    private bool ActualSingletonSame =>
+        _previous is not null &&
+        _current is not null &&
+        _previous.Singleton.First == _current.Singleton.First;
+
+    private int PredictionScore
+    {
+        get
+        {
+            if (_submittedPrediction is null || _previous is null || _current is null)
+            {
+                return 0;
+            }
+
+            var score = 0;
+            score += _submittedPrediction.TransientSame == ActualTransientSame ? 1 : 0;
+            score += _submittedPrediction.ScopedSame == ActualScopedSame ? 1 : 0;
+            score += _submittedPrediction.SingletonSame == ActualSingletonSame ? 1 : 0;
+            return score;
+        }
+    }
+
+    private async Task RunRequestAsync()
+    {
+        if (_running || (_current is not null && !PredictionsComplete))
+        {
+            return;
+        }
+
+        _activeRunNumber = (_current?.RunNumber ?? 0) + 1;
+        _submittedPrediction = _current is null
+            ? null
+            : new PredictionSnapshot(
+                _predictTransientSame!.Value,
+                _predictScopedSame!.Value,
+                _predictSingletonSame!.Value);
+
+        _running = true;
+        _phase = 1;
+        StateHasChanged();
+        await Task.Delay(450);
+
+        _previous = _current;
+        _current = Runner.Run();
+
+        _phase = 2;
+        StateHasChanged();
+        await Task.Delay(650);
+
+        _phase = 3;
+        StateHasChanged();
+        await Task.Delay(650);
+
+        _phase = 4;
+        StateHasChanged();
+        await Task.Delay(350);
+
+        _running = false;
+        _phase = 0;
+
+        _predictTransientSame = null;
+        _predictScopedSame = null;
+        _predictSingletonSame = null;
+    }
+
+    private void SetPrediction(LifetimeKind lifetime, bool same)
+    {
+        switch (lifetime)
+        {
+            case LifetimeKind.Transient:
+                _predictTransientSame = same;
+                break;
+
+            case LifetimeKind.Scoped:
+                _predictScopedSame = same;
+                break;
+
+            case LifetimeKind.Singleton:
+                _predictSingletonSame = same;
+                break;
+        }
+    }
+
+    private void Reset()
+    {
+        _current = null;
+        _previous = null;
+        _submittedPrediction = null;
+        _predictTransientSame = null;
+        _predictScopedSame = null;
+        _predictSingletonSame = null;
+        _phase = 0;
+        _activeRunNumber = 0;
+        Runner.Reset();
+    }
+
+    private static string Short(Guid? id) =>
+        id is Guid value
+            ? value.ToString("N")[..8]
+            : "--------";
+
+    private static string WithinText(bool? same) =>
+        same switch
+        {
+            true => "SAME within scope",
+            false => "NEW within scope",
+            null => "Waiting for request"
+        };
+
+    private static string WithinBadgeClass(bool? same) =>
+        same switch
+        {
+            true => "comparison-badge same",
+            false => "comparison-badge different",
+            null => "comparison-badge waiting"
+        };
+
+    private static string PredictionOptionClass(bool? prediction, bool option)
+    {
+        var optionClass = option ? "same-option" : "new-option";
+        var selectedClass =
+            prediction.HasValue && prediction.Value == option
+                ? " selected"
+                : string.Empty;
+
+        return $"prediction-option {optionClass}{selectedClass}";
+    }
+
+    private static string AcrossClass(bool same) =>
+        same
+            ? "across-value same"
+            : "across-value different";
+
+    private static string PredictionResultClass(bool predictedSame, bool actualSame) =>
+        predictedSame == actualSame
+            ? "prediction-result-item correct"
+            : "prediction-result-item miss";
+
+    private static string PredictionResultText(bool predictedSame, bool actualSame)
+    {
+        var prediction = predictedSame ? "SAME" : "NEW";
+        var actual = actualSame ? "SAME" : "NEW";
+        return $"{prediction} -> {actual}";
+    }
+}
