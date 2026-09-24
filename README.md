@@ -1,4 +1,4 @@
-# DotNetScope — .NET Visual Lab
+# DotNetScope - .NET Visual Lab
 
 Interactive experiments that make real .NET runtime behavior visible.
 
