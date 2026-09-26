@@ -1,5 +1,6 @@
 ﻿using DotNetVisualLab.Web.Components;
 using DotNetVisualLab.Web.Labs.DependencyInjection;
+using DotNetVisualLab.Web.Labs.ExportStrategy;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,11 @@ builder.Services
 builder.Services.AddTransient<ITransientProbe, TransientProbe>();
 builder.Services.AddScoped<IScopedProbe, ScopedProbe>();
 builder.Services.AddSingleton<ISingletonProbe, SingletonProbe>();
+
+// Lab 02: interchangeable document export strategies.
+builder.Services.AddTransient<IExportStrategy, CsvExportStrategy>();
+builder.Services.AddTransient<IExportStrategy, JsonExportStrategy>();
+builder.Services.AddTransient<ExportRouter>();
 
 // The runner is scoped to the current Blazor circuit. Each Run() still creates
 // a fresh IServiceScope so request-boundary behavior remains real and isolated.

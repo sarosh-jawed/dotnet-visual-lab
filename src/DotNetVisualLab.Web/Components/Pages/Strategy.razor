@@ -1,0 +1,736 @@
+@page "/strategy"
+@using DotNetVisualLab.Web.Labs.ExportStrategy
+@inject ExportRouter Router
+
+<PageTitle>DotNetScope | Export Strategy</PageTitle>
+
+<div class="strategy-shell">
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark">&lt;/&gt;</span>
+            <span>DotNetScope</span>
+        </a>
+
+        <div class="topbar-actions">
+            <nav class="lab-nav" aria-label="Lab navigation">
+                <a class="lab-nav-link" href="/">Lab 01</a>
+                <a class="lab-nav-link active" href="/strategy" aria-current="page">Lab 02</a>
+            </nav>
+
+            <span class="tech-pill">.NET 10</span>
+
+            <a class="repo-link"
+               href="https://github.com/sarosh-jawed/dotnet-visual-lab"
+               target="_blank"
+               rel="noreferrer">
+                <svg class="repo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.74-1.55-2.57-.29-5.28-1.29-5.28-5.72 0-1.26.45-2.3 1.19-3.11-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.16 1.19A10.9 10.9 0 0 1 12 6.05c.98 0 1.96.13 2.88.38 2.19-1.5 3.16-1.19 3.16-1.19.63 1.6.23 2.78.11 3.07.74.81 1.19 1.85 1.19 3.11 0 4.44-2.71 5.42-5.29 5.71.42.36.79 1.07.79 2.16v3.26c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z" />
+                </svg>
+                <span>GitHub</span>
+            </a>
+        </div>
+    </header>
+
+    <section class="hero-grid">
+        <div class="hero-copy">
+            <div class="eyebrow">LAB 02 / STRATEGY PATTERN</div>
+            <h1>
+                Route behavior without
+                <span>growing the switch.</span>
+            </h1>
+            <p class="hero-text">
+                Choose an export request, predict the strategy, then watch a real
+                <code>IEnumerable&lt;IExportStrategy&gt;</code> flow through an injected router.
+                CSV and JSON are production strategies. XML intentionally has no strategy.
+            </p>
+        </div>
+
+        <aside class="run-card">
+            <div>
+                <div class="run-card-label">CURRENT STATE</div>
+                <div class="run-card-value">@CurrentStateText</div>
+            </div>
+
+            <div class="run-summary">
+                <span>REQUEST</span>
+                <strong>@SelectedFormatLabel</strong>
+            </div>
+
+            <button type="button"
+                    class="run-button"
+                    @onclick="RouteExportAsync"
+                    disabled="@(!CanRoute)">
+                <span class="run-dot"></span>
+                @RunButtonText
+            </button>
+
+            @if (!_running && !_prediction.HasValue)
+            {
+                <div class="run-hint" aria-live="polite">
+                    Predict CSV, JSON, or NONE before routing the request.
+                </div>
+            }
+
+            @if (HasExecution)
+            {
+                <button type="button"
+                        class="reset-button"
+                        @onclick="ResetExperiment"
+                        disabled="@_running">
+                    Reset experiment
+                </button>
+            }
+        </aside>
+    </section>
+
+    <section class="context-panel" aria-labelledby="context-title">
+        <div class="section-heading">
+            <div>
+                <div class="eyebrow">CONTEXT NOTES</div>
+                <h2 id="context-title">What this lab is proving</h2>
+            </div>
+            <span class="registered-pill">@RegisteredFormatsText registered</span>
+        </div>
+
+        <div class="context-grid">
+            <article>
+                <span class="context-index">01</span>
+                <h3>One contract</h3>
+                <p>
+                    Every exporter implements <code>IExportStrategy</code>, so callers can
+                    depend on behavior instead of concrete CSV or JSON classes.
+                </p>
+            </article>
+
+            <article>
+                <span class="context-index">02</span>
+                <h3>DI supplies the set</h3>
+                <p>
+                    The built-in container injects <code>IEnumerable&lt;IExportStrategy&gt;</code>.
+                    The router never queries <code>IServiceProvider</code> and never constructs a strategy.
+                </p>
+            </article>
+
+            <article>
+                <span class="context-index">03</span>
+                <h3>Router selects, strategy executes</h3>
+                <p>
+                    The router matches the requested format. The selected strategy owns
+                    the serialization algorithm and returns the real <code>ExportResult</code>.
+                </p>
+            </article>
+        </div>
+    </section>
+
+    <section class="experiment-grid">
+        <article class="control-panel">
+            <div class="control-section">
+                <div class="eyebrow">1 / REQUEST FORMAT</div>
+                <h2>What does the caller request?</h2>
+                <p>XML is intentionally unsupported so the no-match path stays observable.</p>
+
+                <div class="format-options" role="group" aria-label="Export format">
+                    <button type="button"
+                            class="@CsvFormatClass"
+                            aria-pressed="@IsCsvSelected"
+                            @onclick="SelectCsv"
+                            disabled="@_running">
+                        <span class="format-code">CSV</span>
+                        <small>registered</small>
+                    </button>
+
+                    <button type="button"
+                            class="@JsonFormatClass"
+                            aria-pressed="@IsJsonSelected"
+                            @onclick="SelectJson"
+                            disabled="@_running">
+                        <span class="format-code">JSON</span>
+                        <small>registered</small>
+                    </button>
+
+                    <button type="button"
+                            class="@XmlFormatClass"
+                            aria-pressed="@IsXmlSelected"
+                            @onclick="SelectXml"
+                            disabled="@_running">
+                        <span class="format-code">XML</span>
+                        <small>unsupported</small>
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-divider"></div>
+
+            <div class="control-section">
+                <div class="eyebrow">2 / PREDICT ROUTE</div>
+                <h2>Which strategy will actually run?</h2>
+                <p>Commit to a prediction before the router executes.</p>
+
+                <div class="prediction-options" role="group" aria-label="Strategy prediction">
+                    <button type="button"
+                            class="@CsvPredictionClass"
+                            aria-pressed="@IsCsvPrediction"
+                            @onclick="PredictCsv"
+                            disabled="@_running">
+                        CSV
+                    </button>
+
+                    <button type="button"
+                            class="@JsonPredictionClass"
+                            aria-pressed="@IsJsonPrediction"
+                            @onclick="PredictJson"
+                            disabled="@_running">
+                        JSON
+                    </button>
+
+                    <button type="button"
+                            class="@NonePredictionClass"
+                            aria-pressed="@IsNonePrediction"
+                            @onclick="PredictNone"
+                            disabled="@_running">
+                        NONE
+                    </button>
+                </div>
+            </div>
+        </article>
+
+        <article class="dataset-panel">
+            <div class="dataset-heading">
+                <div>
+                    <div class="eyebrow">SYNTHETIC INPUT</div>
+                    <h2>@Documents.Count document records</h2>
+                </div>
+                <span class="dataset-badge">no file I/O</span>
+            </div>
+
+            <div class="document-list">
+                @foreach (var document in Documents)
+                {
+                    <div class="document-row">
+                        <code>@document.DocumentId</code>
+                        <div>
+                            <strong>@document.Title</strong>
+                            <span>@document.Department</span>
+                        </div>
+                        <span class="page-count">@document.Pages pages</span>
+                    </div>
+                }
+            </div>
+        </article>
+    </section>
+
+    <section class="@RuntimeStageClass" aria-live="polite">
+        <div class="stage-header">
+            <div>
+                <div class="stage-title">Real strategy-routing pipeline</div>
+                <div class="stage-subtitle">
+                    Built-in DI → ExportRouter → IExportStrategy → ExportResult
+                </div>
+            </div>
+
+            <div class="scope-chip">
+                @if (_running)
+                {
+                    <span>phase @_phase / 4</span>
+                }
+                else if (HasFinishedExecution)
+                {
+                    <span>route complete</span>
+                }
+                else
+                {
+                    <span>router idle</span>
+                }
+            </div>
+        </div>
+
+        <div class="flow-rail" aria-hidden="true">
+            <div class="flow-line"></div>
+            <span class="flow-packet"></span>
+        </div>
+
+        <div class="pipeline-grid">
+            <article class="@RequestNodeClass">
+                <div class="node-label">REQUEST</div>
+                <div class="request-format">@ExecutedOrSelectedFormat</div>
+                <p>@Documents.Count synthetic records</p>
+            </article>
+
+            <article class="@RouterNodeClass">
+                <div class="node-label">ROUTER</div>
+                <h3>ExportRouter</h3>
+                <p>Normalizes the format, then looks up the matching strategy.</p>
+                <code>@RegisteredFormatsText</code>
+            </article>
+
+            <article class="@RegistryNodeClass">
+                <div class="node-label">INJECTED STRATEGIES</div>
+                <h3>IEnumerable&lt;IExportStrategy&gt;</h3>
+
+                <div class="strategy-stack">
+                    <div class="@CsvStrategyClass">
+                        <span class="strategy-dot csv-dot"></span>
+                        <div>
+                            <strong>CsvExportStrategy</strong>
+                            <small>Format = "csv"</small>
+                        </div>
+                        <span class="strategy-state">@StrategyStateText("csv")</span>
+                    </div>
+
+                    <div class="@JsonStrategyClass">
+                        <span class="strategy-dot json-dot"></span>
+                        <div>
+                            <strong>JsonExportStrategy</strong>
+                            <small>Format = "json"</small>
+                        </div>
+                        <span class="strategy-state">@StrategyStateText("json")</span>
+                    </div>
+                </div>
+            </article>
+
+            <article class="@OutputNodeClass">
+                <div class="node-label">REAL OUTPUT</div>
+
+                @if (_phase == 0)
+                {
+                    <div class="terminal-placeholder">
+                        Route a request to observe the actual strategy result.
+                    </div>
+                }
+                else if (_phase < 4)
+                {
+                    <div class="terminal-placeholder working">
+                        @PhaseText
+                    </div>
+                }
+                else if (_result is not null)
+                {
+                    <div class="terminal-meta">
+                        <span>@ActualStrategyName</span>
+                        <span>@_result.ContentType</span>
+                    </div>
+                    <pre>@_result.Content</pre>
+                }
+                else if (_error is not null)
+                {
+                    <div class="terminal-error-title">NO STRATEGY FOUND</div>
+                    <p class="terminal-error-message">@_error</p>
+                }
+            </article>
+        </div>
+    </section>
+
+    @if (HasFinishedExecution)
+    {
+        <section class="prediction-result @(PredictionCorrect ? "correct" : "miss")">
+            <div>
+                <div class="eyebrow">YOUR PREDICTION</div>
+                <h2>@(PredictionCorrect ? "Correct route" : "Prediction mismatch")</h2>
+            </div>
+
+            <div class="prediction-result-values">
+                <div>
+                    <span>YOU CHOSE</span>
+                    <strong>@SubmittedPredictionLabel</strong>
+                </div>
+                <div class="result-arrow">→</div>
+                <div>
+                    <span>ACTUAL</span>
+                    <strong>@ActualPredictionLabel</strong>
+                </div>
+            </div>
+        </section>
+    }
+
+    <section class="compare-grid">
+        <article class="compare-card before-card">
+            <div class="compare-heading">
+                <div>
+                    <div class="eyebrow">BEFORE</div>
+                    <h2>Branching owns every algorithm</h2>
+                </div>
+                <span class="compare-pill warning">changes grow here</span>
+            </div>
+
+            <pre><code>@BeforeCode</code></pre>
+            <p>
+                Each new format adds another branch and another reason for the routing class to change.
+            </p>
+        </article>
+
+        <article class="compare-card after-card">
+            <div class="compare-heading">
+                <div>
+                    <div class="eyebrow">AFTER</div>
+                    <h2>Strategies own the algorithms</h2>
+                </div>
+                <span class="compare-pill good">router stays stable</span>
+            </div>
+
+            <pre><code>@AfterCode</code></pre>
+            <p>
+                The router depends on the contract and collection. A new implementation can participate
+                without adding a format-specific branch to <code>ExportRouter</code>.
+            </p>
+        </article>
+    </section>
+
+    <section class="extension-proof">
+        <div class="proof-icon">✓</div>
+        <div>
+            <div class="eyebrow">EXECUTABLE OPEN/CLOSED PROOF</div>
+            <h2>FakeExportStrategy exists only in the test project.</h2>
+            <p>
+                The test injects a third strategy with <code>Format = "fake"</code> and the unchanged
+                production <code>ExportRouter</code> routes to it successfully. Extensibility is verified by code,
+                not claimed in a comment.
+            </p>
+        </div>
+        <span class="proof-badge">TEST PASS</span>
+    </section>
+
+    <footer class="lab-footer">
+        <span>DotNetScope / Lab 02</span>
+        <span>Real DI registrations. Real strategy output. No simulated routing.</span>
+    </footer>
+</div>
+
+@code {
+    private static readonly IReadOnlyList<DocumentRecord> Documents =
+    [
+        new("DOC-101", "Quarterly Review", "Finance", 18),
+        new("DOC-205", "Hiring Plan", "People Ops", 7),
+        new("DOC-309", "Platform Notes", "Engineering", 12)
+    ];
+
+    private const string BeforeCode = """
+switch (format)
+{
+    case "csv": ExportCsv(documents); break;
+    case "json": ExportJson(documents); break;
+    case "xml": ExportXml(documents); break;
+}
+""";
+
+    private const string AfterCode = """
+ExportRouter(
+    IEnumerable<IExportStrategy> strategies)
+
+strategy = strategies[requestedFormat];
+return strategy.Export(documents);
+""";
+
+    private string _selectedFormat = "json";
+    private string? _executedFormat;
+    private StrategyPrediction? _prediction;
+    private StrategyPrediction? _submittedPrediction;
+    private ExportResult? _result;
+    private string? _error;
+    private bool _running;
+    private int _phase;
+
+    private enum StrategyPrediction
+    {
+        Csv,
+        Json,
+        None
+    }
+
+    private bool CanRoute => !_running && _prediction.HasValue;
+    private bool HasExecution => _phase > 0 || _result is not null || _error is not null;
+    private bool HasFinishedExecution => !_running && (_result is not null || _error is not null);
+
+    private bool IsCsvSelected => string.Equals(_selectedFormat, "csv", StringComparison.OrdinalIgnoreCase);
+    private bool IsJsonSelected => string.Equals(_selectedFormat, "json", StringComparison.OrdinalIgnoreCase);
+    private bool IsXmlSelected => string.Equals(_selectedFormat, "xml", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsCsvPrediction => _prediction == StrategyPrediction.Csv;
+    private bool IsJsonPrediction => _prediction == StrategyPrediction.Json;
+    private bool IsNonePrediction => _prediction == StrategyPrediction.None;
+
+    private string CsvFormatClass => FormatButtonClass("csv");
+    private string JsonFormatClass => FormatButtonClass("json");
+    private string XmlFormatClass => FormatButtonClass("xml");
+
+    private string CsvPredictionClass => PredictionOptionClass(StrategyPrediction.Csv);
+    private string JsonPredictionClass => PredictionOptionClass(StrategyPrediction.Json);
+    private string NonePredictionClass => PredictionOptionClass(StrategyPrediction.None);
+
+    private string CsvStrategyClass => StrategyCardClass("csv");
+    private string JsonStrategyClass => StrategyCardClass("json");
+
+    private string RequestNodeClass => PipelineNodeClass(1, "request-node");
+    private string RouterNodeClass => PipelineNodeClass(2, "router-node");
+    private string RegistryNodeClass => PipelineNodeClass(3, "registry-node");
+    private string OutputNodeClass => PipelineNodeClass(4, _error is null ? "output-node" : "output-node error-node");
+
+    private string RuntimeStageClass =>
+        $"runtime-stage {(_running ? "is-running" : string.Empty)} phase-{_phase}";
+
+    private string SelectedFormatLabel => _selectedFormat.ToUpperInvariant();
+    private string ExecutedOrSelectedFormat => (_executedFormat ?? _selectedFormat).ToUpperInvariant();
+
+    private string RegisteredFormatsText => string.Join(
+        " · ",
+        Router.SupportedFormats
+            .OrderBy(format => format, StringComparer.OrdinalIgnoreCase)
+            .Select(format => format.ToUpperInvariant()));
+
+    private string CurrentStateText
+    {
+        get
+        {
+            if (_running)
+            {
+                return PhaseText;
+            }
+
+            if (_result is not null)
+            {
+                return $"{_result.Format.ToUpperInvariant()} export generated";
+            }
+
+            if (_error is not null)
+            {
+                return "Unsupported route observed";
+            }
+
+            if (!_prediction.HasValue)
+            {
+                return "Choose a format and predict the route";
+            }
+
+            return $"Ready to route {_selectedFormat.ToUpperInvariant()}";
+        }
+    }
+
+    private string RunButtonText => _running ? "Routing..." : "Route Export";
+
+    private string PhaseText => _phase switch
+    {
+        1 => "Request entering pipeline...",
+        2 => "Router normalizing format...",
+        3 => "Matching registered strategies...",
+        4 => "Returning export result...",
+        _ => "Router idle"
+    };
+
+    private string ActualStrategyName => _result?.Format.ToLowerInvariant() switch
+    {
+        "csv" => nameof(CsvExportStrategy),
+        "json" => nameof(JsonExportStrategy),
+        _ => "None"
+    };
+
+    private StrategyPrediction? ActualPrediction
+    {
+        get
+        {
+            if (_result is not null)
+            {
+                if (string.Equals(_result.Format, "csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StrategyPrediction.Csv;
+                }
+
+                if (string.Equals(_result.Format, "json", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StrategyPrediction.Json;
+                }
+            }
+
+            return _error is not null
+                ? StrategyPrediction.None
+                : null;
+        }
+    }
+
+    private bool PredictionCorrect =>
+        _submittedPrediction.HasValue &&
+        ActualPrediction.HasValue &&
+        _submittedPrediction.Value == ActualPrediction.Value;
+
+    private string SubmittedPredictionLabel =>
+        _submittedPrediction?.ToString().ToUpperInvariant() ?? "—";
+
+    private string ActualPredictionLabel =>
+        ActualPrediction?.ToString().ToUpperInvariant() ?? "—";
+
+    private void SelectCsv() => SelectFormat("csv");
+    private void SelectJson() => SelectFormat("json");
+    private void SelectXml() => SelectFormat("xml");
+
+    private void PredictCsv() => SetPrediction(StrategyPrediction.Csv);
+    private void PredictJson() => SetPrediction(StrategyPrediction.Json);
+    private void PredictNone() => SetPrediction(StrategyPrediction.None);
+
+    private void SelectFormat(string format)
+    {
+        if (_running)
+        {
+            return;
+        }
+
+        _selectedFormat = format;
+        _prediction = null;
+        ClearExecution();
+    }
+
+    private void SetPrediction(StrategyPrediction prediction)
+    {
+        if (_running)
+        {
+            return;
+        }
+
+        _prediction = prediction;
+    }
+
+    private async Task RouteExportAsync()
+    {
+        if (!CanRoute)
+        {
+            return;
+        }
+
+        _executedFormat = _selectedFormat;
+        _submittedPrediction = _prediction;
+        _result = null;
+        _error = null;
+        _running = true;
+
+        try
+        {
+            await AdvanceToAsync(1, 420);
+            await AdvanceToAsync(2, 520);
+            await AdvanceToAsync(3, 620);
+
+            try
+            {
+                _result = Router.Export(_executedFormat, Documents);
+            }
+            catch (NotSupportedException exception)
+            {
+                _error = exception.Message;
+            }
+
+            await AdvanceToAsync(4, 460);
+        }
+        finally
+        {
+            _running = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AdvanceToAsync(int phase, int delayMilliseconds)
+    {
+        _phase = phase;
+        StateHasChanged();
+        await Task.Delay(delayMilliseconds);
+    }
+
+    private void ResetExperiment()
+    {
+        if (_running)
+        {
+            return;
+        }
+
+        _selectedFormat = "json";
+        _prediction = null;
+        ClearExecution();
+    }
+
+    private void ClearExecution()
+    {
+        _executedFormat = null;
+        _submittedPrediction = null;
+        _result = null;
+        _error = null;
+        _phase = 0;
+    }
+
+    private string FormatButtonClass(string format)
+    {
+        var selected = string.Equals(
+            _selectedFormat,
+            format,
+            StringComparison.OrdinalIgnoreCase);
+
+        return $"format-button {format} {(selected ? "selected" : string.Empty)}";
+    }
+
+    private string PredictionOptionClass(StrategyPrediction prediction)
+    {
+        var selected = _prediction == prediction;
+        var kind = prediction.ToString().ToLowerInvariant();
+        return $"prediction-option {kind} {(selected ? "selected" : string.Empty)}";
+    }
+
+    private string PipelineNodeClass(int step, string extraClass)
+    {
+        var state = _phase switch
+        {
+            0 => string.Empty,
+            var phase when phase == step => "active",
+            var phase when phase > step => "complete",
+            _ => string.Empty
+        };
+
+        return $"pipeline-node {extraClass} {state}";
+    }
+
+    private string StrategyCardClass(string format)
+    {
+        const string baseClass = "strategy-option-card";
+
+        if (_phase < 3 || _executedFormat is null)
+        {
+            return $"{baseClass} {format}";
+        }
+
+        var requestedFormatIsSupported = Router.SupportedFormats.Any(
+            supported => string.Equals(
+                supported,
+                _executedFormat,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (!requestedFormatIsSupported)
+        {
+            return $"{baseClass} {format} no-match";
+        }
+
+        var selected = string.Equals(
+            format,
+            _executedFormat,
+            StringComparison.OrdinalIgnoreCase);
+
+        return selected
+            ? $"{baseClass} {format} selected"
+            : $"{baseClass} {format} dimmed";
+    }
+
+    private string StrategyStateText(string format)
+    {
+        if (_phase < 3 || _executedFormat is null)
+        {
+            return "registered";
+        }
+
+        var requestedFormatIsSupported = Router.SupportedFormats.Any(
+            supported => string.Equals(
+                supported,
+                _executedFormat,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (!requestedFormatIsSupported)
+        {
+            return "no match";
+        }
+
+        return string.Equals(format, _executedFormat, StringComparison.OrdinalIgnoreCase)
+            ? "selected"
+            : "skipped";
+    }
+}
