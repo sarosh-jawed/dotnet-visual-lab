@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     color-scheme: dark;
     --page-bg: #05070d;
 }
@@ -43,6 +43,14 @@ h2,
 h3,
 p {
     text-wrap: pretty;
+}
+/*
+ * Blazor FocusOnNavigate focuses the destination h1 after routing.
+ * Suppress the browser rectangle on the non-interactive heading while
+ * preserving focus-visible outlines for links and buttons above.
+ */
+h1:focus {
+    outline: none;
 }
 
 #blazor-error-ui {

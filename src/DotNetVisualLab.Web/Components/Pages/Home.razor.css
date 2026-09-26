@@ -1,5 +1,5 @@
-﻿.lab-shell {
-    width: min(1380px, calc(100% - 40px));
+.lab-shell {
+    width: min(1540px, calc(100% - 32px));
     margin: 0 auto;
     padding: 24px 0 56px;
 }
@@ -33,7 +33,7 @@
     color: #67e8f9;
     box-shadow: inset 0 0 24px rgba(34, 211, 238, .07);
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .77rem;
+    font-size: .82rem;
 }
 
 .topbar-actions {
@@ -49,7 +49,7 @@
     background: rgba(255,255,255,.045);
     color: #bdc4d9;
     padding: 8px 12px;
-    font-size: .8rem;
+    font-size: .85rem;
     font-weight: 650;
 }
 
@@ -86,7 +86,7 @@
 .eyebrow {
     color: #67e8f9;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .72rem;
+    font-size: .82rem;
     font-weight: 800;
     letter-spacing: .15em;
     text-transform: uppercase;
@@ -116,7 +116,7 @@
     max-width: 760px;
     margin: 0;
     color: #98a2bb;
-    font-size: 1.06rem;
+    font-size: 1.1rem;
     line-height: 1.7;
 }
 
@@ -134,7 +134,7 @@
 
 .run-card-label {
     color: #69758f;
-    font-size: .68rem;
+    font-size: .74rem;
     font-weight: 800;
     letter-spacing: .13em;
 }
@@ -142,7 +142,7 @@
 .run-card-value {
     margin-top: 5px;
     color: #e8ebf6;
-    font-size: .98rem;
+    font-size: 1.02rem;
     font-weight: 650;
 }
 
@@ -176,7 +176,7 @@
     margin-top: -8px;
     padding: 0 2px;
     color: #737f98;
-    font-size: .69rem;
+    font-size: .82rem;
     line-height: 1.45;
 }
 
@@ -221,7 +221,7 @@
 .prediction-copy p {
     margin: 0;
     color: #7e899f;
-    font-size: .89rem;
+    font-size: .94rem;
     line-height: 1.55;
 }
 
@@ -243,7 +243,7 @@
     align-items: center;
     gap: 7px;
     color: #aeb7c9;
-    font-size: .76rem;
+    font-size: .82rem;
     font-weight: 700;
 }
 
@@ -265,7 +265,7 @@
     padding: 7px 9px;
     cursor: pointer;
     font-family: inherit;
-    font-size: .69rem;
+    font-size: .82rem;
     font-weight: 800;
     letter-spacing: .055em;
     line-height: 1;
@@ -358,7 +358,7 @@
     margin-top: 4px;
     color: #66728a;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .72rem;
+    font-size: .82rem;
 }
 
 .scope-chip {
@@ -372,7 +372,7 @@
     color: #7dd3df;
     padding: 8px 12px;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .68rem;
+    font-size: .74rem;
 }
 
 .request-track {
@@ -389,7 +389,7 @@
 .container-label {
     color: #536076;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .62rem;
+    font-size: .68rem;
     font-weight: 800;
     letter-spacing: .12em;
 }
@@ -449,13 +449,13 @@
 .service-registration {
     color: var(--accent);
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .67rem;
+    font-size: .73rem;
     font-weight: 800;
 }
 
 .service-rule {
     color: #59647a;
-    font-size: .68rem;
+    font-size: .74rem;
 }
 
 .service-card h3 {
@@ -485,7 +485,7 @@
     display: block;
     margin-bottom: 2px;
     color: #5d687d;
-    font-size: .65rem;
+    font-size: .71rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .08em;
@@ -526,7 +526,7 @@
     border-radius: 999px;
     padding: 6px 9px;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .64rem;
+    font-size: .70rem;
     font-weight: 800;
     letter-spacing: .04em;
 }
@@ -563,7 +563,7 @@
     gap: 12px;
     color: #69758c;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .66rem;
+    font-size: .72rem;
     font-weight: 800;
 }
 
@@ -609,7 +609,7 @@
     justify-content: space-between;
     gap: 12px;
     color: #818ba0;
-    font-size: .78rem;
+    font-size: .82rem;
 }
 
 .instance-transition {
@@ -623,7 +623,7 @@
 .instance-transition code {
     color: #69758c;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .64rem;
+    font-size: .70rem;
 }
 
 .transition-rail {
@@ -654,7 +654,7 @@
 .across-value {
     white-space: nowrap;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .64rem;
+    font-size: .70rem;
 }
 
 .across-value.same { color: #67e8f9; }
@@ -693,12 +693,12 @@
     border-radius: 12px;
     background: rgba(255,255,255,.025);
     color: #7f8aa0;
-    font-size: .75rem;
+    font-size: .80rem;
 }
 
 .prediction-result-item strong {
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .68rem;
+    font-size: .74rem;
 }
 
 .prediction-result-item.correct strong { color: #6ee7b7; }
@@ -730,7 +730,7 @@
 .learning-grid p {
     margin: 0;
     color: #747f94;
-    font-size: .84rem;
+    font-size: .90rem;
     line-height: 1.65;
 }
 
@@ -741,7 +741,7 @@
     padding: 25px 2px 0;
     color: #465168;
     font-family: Consolas, "SFMono-Regular", monospace;
-    font-size: .67rem;
+    font-size: .73rem;
 }
 
 @keyframes requestSweep {
