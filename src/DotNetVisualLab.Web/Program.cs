@@ -18,6 +18,8 @@ builder.Services.AddTransient<IExportStrategy, CsvExportStrategy>();
 builder.Services.AddTransient<IExportStrategy, JsonExportStrategy>();
 builder.Services.AddTransient<ExportRouter>();
 
+builder.Services.AddHealthChecks();
+
 // The runner is scoped to the current Blazor circuit. Each Run() still creates
 // a fresh IServiceScope so request-boundary behavior remains real and isolated.
 builder.Services.AddScoped<LifetimeExperimentRunner>();
@@ -37,5 +39,7 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapHealthChecks("/health");
 
 app.Run();
