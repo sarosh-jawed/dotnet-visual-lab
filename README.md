@@ -172,6 +172,45 @@ Every push to `main` and every pull request targeting `main` runs:
 
 This provides an independent validation gate outside the developer machine.
 
+
+## Docker — Verified Local Run
+
+Prerequisites: Docker Desktop with the Linux engine running.
+
+Run from the repository root in PowerShell:
+
+```powershell
+docker build -t dotnet-visual-lab:verify .
+docker run -d --name dotnet-visual-lab-verify -p 8085:8080 dotnet-visual-lab:verify
+
+Start-Sleep -Seconds 10
+(Invoke-WebRequest -UseBasicParsing http://localhost:8085/health).StatusCode
+
+docker restart dotnet-visual-lab-verify
+Start-Sleep -Seconds 10
+(Invoke-WebRequest -UseBasicParsing http://localhost:8085/health).StatusCode
+
+docker logs dotnet-visual-lab-verify --tail 30
+```
+
+Expected: HTTP 200 and Healthy before and after restart.
+
+Open:
+- http://localhost:8085/ — Dependency Injection lab
+- http://localhost:8085/strategy — Strategy Pattern lab
+
+Port 8085 is on the host; port 8080 is inside the container.
+
+This verifies a reproducible local Docker run, not cloud hosting or production readiness. Production deployment would require explicit HTTPS configuration, persistent and protected ASP.NET Core Data Protection keys, secure secrets management, and operational controls. Do not include credentials or secrets in the image or repository.
+
+When finished:
+
+```powershell
+docker stop dotnet-visual-lab-verify
+docker rm dotnet-visual-lab-verify
+```
+
+
 ## Roadmap
 
 - Lab 01: Dependency Injection lifetimes
