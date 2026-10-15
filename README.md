@@ -173,7 +173,7 @@ Every push to `main` and every pull request targeting `main` runs:
 This provides an independent validation gate outside the developer machine.
 
 
-## Docker — Verified Local Run
+## Docker - Verified Local Run
 
 Prerequisites: Docker Desktop with the Linux engine running.
 
