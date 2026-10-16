@@ -1,6 +1,7 @@
 ﻿using DotNetVisualLab.Web.Components;
 using DotNetVisualLab.Web.Labs.DependencyInjection;
 using DotNetVisualLab.Web.Labs.ExportStrategy;
+using DotNetVisualLab.Web.Labs.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,9 @@ builder.Services.AddSingleton<ISingletonProbe, SingletonProbe>();
 builder.Services.AddTransient<IExportStrategy, CsvExportStrategy>();
 builder.Services.AddTransient<IExportStrategy, JsonExportStrategy>();
 builder.Services.AddTransient<ExportRouter>();
+
+// Lab 03: isolated, in-memory middleware execution.
+builder.Services.AddTransient<MiddlewareExperimentRunner>();
 
 builder.Services.AddHealthChecks();
 

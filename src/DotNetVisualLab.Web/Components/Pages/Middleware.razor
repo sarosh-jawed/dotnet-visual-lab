@@ -1,0 +1,930 @@
+@page "/middleware"
+@implements IDisposable
+@using System.Diagnostics
+@using DotNetVisualLab.Web.Labs.Middleware
+@inject MiddlewareExperimentRunner Runner
+@inject ILogger<MiddlewareExperimentRunner> Logger
+
+<PageTitle>DotNetScope | Middleware Flight Recorder</PageTitle>
+
+<div class="middleware-shell">
+    <header class="topbar">
+        <a class="brand" href="/" aria-label="DotNetScope home">
+            <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+            <span>DotNetScope</span>
+        </a>
+        <div class="topbar-actions">
+            <nav class="lab-nav" aria-label="Lab navigation">
+                <a class="lab-nav-link" href="/">Lab 01</a>
+                <a class="lab-nav-link" href="/strategy">Lab 02</a>
+                <a class="lab-nav-link active" href="/middleware" aria-current="page">Lab 03</a>
+            </nav>
+            <span class="tech-pill">.NET 10</span>
+            <a class="repo-link" href="https://github.com/sarosh-jawed/dotnet-visual-lab" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+    </header>
+
+    <section class="intro" aria-labelledby="middleware-title">
+        <div>
+            <p class="eyebrow">LAB 03 / MIDDLEWARE FLIGHT RECORDER</p>
+            <h1 id="middleware-title">Follow the request.<br /><span>Explain the return.</span></h1>
+            <p class="intro-copy">A web request passes through small pieces of code called <strong>middleware</strong>. Each can inspect it, change the response, or stop the journey. Move one piece and discover why the same rejection can leave a different response.</p>
+            <div class="intro-actions">
+                <a class="start-link" href="middleware#components" @onclick="() => FocusHeadingAsync(_componentsHeading)">Start: meet the four components <span aria-hidden="true">↓</span></a>
+                <a class="text-link" href="middleware#experiment" @onclick="() => FocusHeadingAsync(_experimentHeading)">Know the basics? Go to the experiment</a>
+            </div>
+        </div>
+        <aside class="orientation" aria-label="Learning orientation">
+            <p class="eyebrow">WHAT YOU'LL LEARN</p>
+            <p>Read the journey in both directions. Explain what ran, what was skipped, and why a header survived.</p>
+            <ol class="journey-steps">
+                <li><span>01</span> Meet the components</li>
+                <li><span>02</span> Predict, then run real C#</li>
+                <li><span>03</span> Inspect, compare, explain</li>
+            </ol>
+            <details class="boundary-note">
+                <summary>How this experiment works</summary>
+                <p>The button builds a real <code>ApplicationBuilder</code> pipeline around a synthetic <code>GET /demo/documents</code> request. It captures immutable response snapshots in memory. Replay reads those snapshots; it never sends another request.</p>
+                <p>This is separate from the live site's middleware. It does not demonstrate endpoint routing, authentication, transport flushing or distributed tracing.</p>
+            </details>
+        </aside>
+    </section>
+
+    <section class="component-section" aria-labelledby="components">
+        <div class="section-heading">
+            <div><p class="eyebrow">UNDERSTAND / MEET THE COMPONENTS</p><h2 id="components" class="anchor-target" tabindex="-1" @ref="_componentsHeading">One journey. Four responsibilities.</h2></div>
+            <p class="section-hint">Select a component to connect the analogy to C#.</p>
+        </div>
+        <p class="section-copy">Think of an airport journey: a record, a checkpoint, a processing stamp, then a destination. Here those jobs belong to middleware and a terminal delegate. A stays first; you can swap B and C.</p>
+        <div class="component-picker" role="group" aria-label="Explore the pipeline components">
+            @foreach (var component in Components)
+            {
+                <button type="button" class="component-choice @(_componentCode == component.Code ? "component-selected" : "")" aria-pressed="@(_componentCode == component.Code ? "true" : "false")" @onclick="() => _componentCode = component.Code" @key="component.Code">
+                    <span class="component-letter">@component.Code</span>
+                    <span><strong>@component.Title</strong><small>@component.Analogy</small></span>
+                </button>
+            }
+        </div>
+        <div class="component-explanation">
+            <div>
+                <h3>@ActiveComponent.Title: @ActiveComponent.Analogy.ToLowerInvariant()</h3>
+                <p class="layer-label">In plain English</p>
+                <p>@ActiveComponent.Explanation</p>
+            </div>
+            <dl>
+                <div><dt>C# meaning</dt><dd>@ActiveComponent.Effect</dd></div>
+                <div><dt>Relevant code</dt><dd><code>@ActiveComponent.Concept</code></dd></div>
+                @if (_componentCode == "A")
+                {
+                    <div>
+                        <dt>Why A can finish after a rejection</dt>
+                        <dd>B returns normally after rejecting, so A's awaited call completes and A.after runs. An uncaught downstream exception would escape the await and skip this ordinary after code. A.after is not a finally block.</dd>
+                    </div>
+                }
+            </dl>
+        </div>
+        <p class="analogy-limit">The stamp is information, not permission. <code>X-Lab-Stamp</code> is a demonstration response header, not authentication, authorization or security clearance.</p>
+        <details class="primer">
+            <summary>New to HTTP or to before / after? Read this first.</summary>
+            <div class="primer-grid">
+                <div>
+                    <h3>Request in, response out</h3>
+                    <p>A request is what a caller asks the application to do. Here, <code>GET /demo/documents</code> asks for the demo documents. The response is what the application returns: a status code (the outcome), headers (named metadata), and a body (returned content). HTTP 200 means success; 403 means forbidden.</p>
+                </div>
+                <div>
+                    <h3>The request's information and processing code</h3>
+                    <p><code>HttpContext</code> holds information about this request and its response. A <code>RequestDelegate</code> is executable request-processing code: a function that receives that context and returns a <code>Task</code> representing its asynchronous operation.</p>
+                    <p><code>next</code> is the delegate for the remaining pipeline. <code>await</code> asynchronously waits for that operation to finish before continuing this method. <code>Use</code> adds middleware that can call next.</p>
+                </div>
+                <div><h3>Before, wait, after</h3><pre><code>Record("A.before");
+await next(request);
+Record("A.after");</code></pre><p><code>before</code> records entry. A then waits for downstream work. <code>after</code> records its normal return. The return path is nested C# calls unwinding, not a second pipeline.</p></div>
+                <div><h3>Stopping the journey</h3><p>A short-circuit writes a response and returns without calling <code>next</code>. Components further down are skipped. Previously entered components can resume if that return completes normally. The endpoint uses a terminal <code>Run</code> delegate with no next component.</p></div>
+            </div>
+        </details>
+    </section>
+
+    <section class="experiment-section" aria-labelledby="experiment">
+        <div class="section-heading">
+            <div><p class="eyebrow">PREDICT / EXECUTE / INVESTIGATE</p><h2 id="experiment" class="anchor-target" tabindex="-1" @ref="_experimentHeading">Make the call. Follow the evidence.</h2></div>
+            <span class="section-hint">Real delegates · isolated runs · captured state</span>
+        </div>
+        @if (_current is not null)
+        {
+            <div class="result-context @(HasPendingChanges ? "pending-context" : "")">
+                <div>
+                    <strong>Showing completed run #@_successfulRuns · @ScenarioCode(_current.Options)</strong>
+                    <span>@OrderLabel(_current.Options.Order) · Reject @OnOff(_current.Options.RejectRequest)</span>
+                    <span class="completed-score">@FeedbackScore / 3 predictions correct</span>
+                </div>
+                <p>@(HasPendingChanges ? "Pending settings differ. These results and feedback stay with the completed run until you answer fresh predictions and run again." : "Trace, inspector and feedback below all belong to this completed run.")</p>
+            </div>
+        }
+        <div class="execution-workspace">
+            <section class="work-panel setup-panel" aria-labelledby="setup-title">
+                <div class="panel-heading"><p class="eyebrow">01 / YOUR NEXT RUN</p><h3 id="setup-title">Configure &amp; predict</h3></div>
+                <fieldset class="option-fieldset" disabled="@ControlsLocked" aria-describedby="order-help order-flow-help">
+                    <legend>Middleware order</legend>
+                    <p id="order-help" class="order-help">Both orders process the same <code>GET /demo/documents</code>. A stays first. Only the positions of B (checkpoint) and C (processing stamp) swap.</p>
+                    <label class="order-choice @OrderChoiceClass(PipelineOrder.GateBeforeStamp)">
+                        <input type="radio" name="lab03-order" checked="@(_pendingOrder == PipelineOrder.GateBeforeStamp)" @onchange="() => SetOrder(PipelineOrder.GateBeforeStamp)" />
+                        <span>
+                            <strong>Gate before stamp</strong>
+                            <small>A → B → C → Endpoint</small>
+                            <small>The checkpoint comes before the processing stamp.</small>
+                        </span>
+                    </label>
+                    <label class="order-choice @OrderChoiceClass(PipelineOrder.StampBeforeGate)">
+                        <input type="radio" name="lab03-order" checked="@(_pendingOrder == PipelineOrder.StampBeforeGate)" @onchange="() => SetOrder(PipelineOrder.StampBeforeGate)" />
+                        <span>
+                            <strong>Stamp before gate</strong>
+                            <small>A → C → B → Endpoint</small>
+                            <small>The processing stamp comes before the checkpoint.</small>
+                        </span>
+                    </label>
+                    <p id="order-flow-help" class="order-help">A component runs when the earlier one calls next. If that earlier component stops, later components are not entered.</p>
+                </fieldset>
+                <label class="reject-control" for="lab03-reject">
+                    <input id="lab03-reject" type="checkbox" checked="@_pendingReject" disabled="@ControlsLocked" @onchange="OnRejectChanged" />
+                    <span><strong>Reject request at DemoGate</strong><small>B will return 403 without calling next.</small></span>
+                </label>
+                <p class="pending-label">Pending: @ScenarioCode(new(_pendingReject, _pendingOrder)) · Reject @OnOff(_pendingReject)</p>
+                <p class="configuration-note">Changing order or rejection clears all three predictions.</p>
+                @if (_configurationChanged && !PredictionsComplete)
+                {
+                    <p class="configuration-notice">Settings changed. Make three fresh predictions to enable Run.</p>
+                }
+                <div class="prediction-header"><strong>Predict the completed result</strong><span>@PredictionCount / 3</span></div>
+                <fieldset class="predict-fieldset" disabled="@ControlsLocked" aria-describedby="endpoint-hint">
+                    <legend>Will the demo endpoint execute?</legend>
+                    <p id="endpoint-hint">Will the request reach the final destination?</p>
+                    <div class="binary-row">
+                        <label><input type="radio" name="lab03-pred-endpoint" checked="@(_pendingEndpoint == true)" @onchange="() => SetPrediction(PredictionKind.Endpoint, true)" /> Yes</label>
+                        <label><input type="radio" name="lab03-pred-endpoint" checked="@(_pendingEndpoint == false)" @onchange="() => SetPrediction(PredictionKind.Endpoint, false)" /> No</label>
+                    </div>
+                </fieldset>
+                <fieldset class="predict-fieldset" disabled="@ControlsLocked" aria-describedby="after-hint">
+                    <legend>Will A.after execute?</legend>
+                    <p id="after-hint">Will RequestLog resume after its awaited next returns?</p>
+                    <div class="binary-row">
+                        <label><input type="radio" name="lab03-pred-after" checked="@(_pendingAfter == true)" @onchange="() => SetPrediction(PredictionKind.After, true)" /> Yes</label>
+                        <label><input type="radio" name="lab03-pred-after" checked="@(_pendingAfter == false)" @onchange="() => SetPrediction(PredictionKind.After, false)" /> No</label>
+                    </div>
+                </fieldset>
+                <fieldset class="predict-fieldset" disabled="@ControlsLocked" aria-describedby="stamp-hint">
+                    <legend>Will X-Lab-Stamp exist?</legend>
+                    <p id="stamp-hint">Will the final response contain C's informational header?</p>
+                    <div class="binary-row">
+                        <label><input type="radio" name="lab03-pred-stamp" checked="@(_pendingStamp == true)" @onchange="() => SetPrediction(PredictionKind.Stamp, true)" /> Yes</label>
+                        <label><input type="radio" name="lab03-pred-stamp" checked="@(_pendingStamp == false)" @onchange="() => SetPrediction(PredictionKind.Stamp, false)" /> No</label>
+                    </div>
+                </fieldset>
+                <div class="run-feedback-slot" role="group" aria-label="Prediction feedback">
+                    @if (_current is not null && _submitted is not null)
+                    {
+                        <h4 id="feedback-title">Run #@_successfulRuns feedback <span>@FeedbackScore / 3 correct</span></h4>
+                        <ul class="feedback-outcomes" aria-label="Individual prediction outcomes">
+                            @foreach (var feedback in FeedbackRows())
+                            {
+                                <li class="feedback-outcome @(feedback.IsCorrect ? "correct" : "incorrect")" @key="feedback.Name">
+                                    <strong>@feedback.ShortName</strong>
+                                    <span class="feedback-verdict">@(feedback.IsCorrect ? "Correct" : "Incorrect")</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <h4>Prediction feedback</h4>
+                        <p>After Run, check your score and each prediction's verdict here. Expand the explanations below the controls.</p>
+                    }
+                </div>
+                <div class="action-group">
+                    <button type="button" class="run-button" disabled="@(!CanRun)" aria-describedby="run-guidance" @onclick="RunExperimentAsync">@(_executing ? "Executing…" : "Run experiment") <span aria-hidden="true">→</span></button>
+                    <button type="button" class="quiet-button" disabled="@_executing" @onclick="ResetExperiment">Reset experiment</button>
+                </div>
+                <p id="run-guidance" class="run-guidance">@RunGuidance</p>
+                <p class="run-notification" role="status" aria-live="polite" aria-atomic="true">@_announcement</p>
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div role="alert" class="error-message"><strong>Experiment failed.</strong><p>@_errorMessage Previous successful results remain available. Try again or check the application log.</p></div>
+                }
+                @if (_current is not null && _submitted is not null)
+                {
+                    <section class="feedback-section" aria-labelledby="feedback-reasons-title">
+                        <h4 id="feedback-reasons-title">Why these answers?</h4>
+                        <details class="feedback-details" @key="_current.RunId">
+                            <summary>@FeedbackReviewLabel</summary>
+                            @foreach (var feedback in FeedbackRows())
+                            {
+                                <article class="feedback-item @(feedback.IsCorrect ? "correct" : "incorrect")" @key="feedback.Name">
+                                    <strong>@feedback.Name</strong>
+                                    <div>Predicted @YesNo(feedback.Predicted) · Actual @YesNo(feedback.Actual)</div>
+                                    <span class="feedback-verdict">@(feedback.IsCorrect ? "Correct" : "Review this prediction")</span>
+                                    <p>@feedback.Explanation</p>
+                                </article>
+                            }
+                        </details>
+                    </section>
+                }
+            </section>
+
+            <section class="work-panel trace-panel" aria-labelledby="trace-title">
+                <div class="panel-heading row-heading"><div><p class="eyebrow">02 / CAPTURED EXECUTION</p><h3 id="trace-title">What actually ran?</h3></div><span class="run-index">@(_current is null ? "No run yet" : $"Run #{_successfulRuns}")</span></div>
+                @if (_current is null)
+                {
+                    <div class="empty-state"><span class="empty-code" aria-hidden="true">{ }</span><h4>Your trace starts with a prediction.</h4><p>Choose an order, decide whether B should reject, then answer all three Yes/No questions. Run will enable when you are ready.</p><p>The events here will come from the C# middleware itself.</p></div>
+                }
+                else
+                {
+                    <div class="executed-summary"><strong>@ScenarioCode(_current.Options)</strong><span>@OrderLabel(_current.Options.Order)<br />Reject @OnOff(_current.Options.RejectRequest)</span></div>
+                    <div class="pipeline-rail" role="group" aria-label="Component states at the selected captured event">
+                        @foreach (var node in ExecutedNodes())
+                        {
+                            var state = GetNodeState(node.Code);
+                            <div class="pipeline-node @NodeCss(state)" @key="node.Code"><span class="node-letter">@(node.Code == "Endpoint" ? "E" : node.Code)</span><span class="node-name"><strong>@node.Title</strong><small>@node.Description</small></span><span class="node-state">@StateLabel(state)</span></div>
+                        }
+                    </div>
+                    <div class="trace-subhead"><h4>Captured event sequence</h4><span>@(_selectedIndex + 1) / @_current.Events.Count</span></div>
+                    <p id="trace-depth-help" class="trace-depth-help">Indentation follows the executed call chain. Enter moves inward; Resume continues outward when an awaited call returns.</p>
+                    <div class="event-list" role="group" aria-label="Select a captured middleware event" aria-describedby="trace-depth-help">
+                        @for (var i = 0; i < _current.Events.Count; i++)
+                        {
+                            var eventIndex = i;
+                            var item = _current.Events[i];
+                            var depth = EventDepth(item.Code);
+                            <button type="button" @key="item.Sequence"
+                                    class="trace-event @EventCss(eventIndex, item.Code)"
+                                    style="--event-depth: @depth;" data-depth="@depth"
+                                    aria-pressed="@(eventIndex == _selectedIndex ? "true" : "false")"
+                                    aria-label="Select event @item.Sequence, @item.Code. @EventPhase(item.Code). Call level @(depth + 1)."
+                                    @onclick="() => SelectEvent(eventIndex)">
+                                <span class="event-number">@item.Sequence.ToString("00")</span>
+                                <span class="event-direction" aria-hidden="true">@EventDirection(item.Code)</span>
+                                <code>@item.Code</code>
+                                <span class="event-phase">@EventPhase(item.Code)</span>
+                            </button>
+                        }
+                    </div>
+                    <div class="playback-strip" role="group" aria-label="Trace playback controls">
+                        <div class="playback-buttons">
+                            <button type="button" class="transport-button" disabled="@(_selectedIndex <= 0)" @onclick="PreviousEvent" aria-label="Previous event">←</button>
+                            <button type="button" class="transport-button primary-transport" disabled="@_executing" aria-pressed="@(_playing ? "true" : "false")" @onclick="TogglePlaybackAsync">@(_playing ? "Pause replay" : "Play replay")</button>
+                            <button type="button" class="transport-button" disabled="@(_selectedIndex >= _current.Events.Count - 1)" @onclick="NextEvent" aria-label="Next event">→</button>
+                            <button type="button" class="transport-button" disabled="@_executing" @onclick="RestartReplay">Restart</button>
+                        </div>
+                        <p>Replay selects saved events every 500 ms. It does not execute C# again or measure runtime speed.</p>
+                    </div>
+                    @if (SelectedEvent is not null)
+                    {
+                        var story = EventStory(SelectedEvent.Code);
+                        <section class="event-story" aria-labelledby="story-title">
+                            <h4 id="story-title"><code>@SelectedEvent.Code</code> explained</h4>
+                            <dl>
+                                <div><dt>What happened</dt><dd>@story.What</dd></div>
+                                <div><dt>Why here</dt><dd>@story.Why</dd></div>
+                                <div><dt>State at this step</dt><dd>@story.Change</dd></div>
+                                <div><dt>Next captured event</dt><dd>@NextEventExplanation</dd></div>
+                            </dl>
+                        </section>
+                    }
+                }
+            </section>
+
+            <aside class="work-panel inspector-panel" aria-labelledby="inspector-title">
+                <div class="panel-heading"><p class="eyebrow">03 / SELECTED SNAPSHOT</p><h3 id="inspector-title">Response at this moment</h3></div>
+                @if (_current is null || SelectedEvent is null)
+                {
+                    <div class="empty-state inspector-empty"><h4>Inspect the evidence.</h4><p>After a run, select any event. You will see the response exactly as it was captured there, plus the relevant C# excerpt.</p></div>
+                }
+                else
+                {
+                    var selected = SelectedEvent!;
+                    var snapshot = selected.Snapshot;
+                    <p class="inspector-caption">After event @selected.Sequence of @_current.Events.Count · <code>@selected.Code</code></p>
+                    <div class="status-grid"><div class="status-tile"><span>HTTP status</span><strong class="@StatusClass(snapshot.StatusCode)">@snapshot.StatusCode</strong></div><div class="status-tile"><span>Endpoint executions</span><strong>@snapshot.EndpointExecutionCount</strong></div></div>
+                    @if (snapshot.StatusCode == 200 && snapshot.EndpointExecutionCount == 0 && string.IsNullOrEmpty(snapshot.Body))
+                    {
+                        <p class="inspector-hint">200 is still the default in-memory status. No response body has been written, so this is not evidence of a successful endpoint.</p>
+                    }
+                    <h4 class="inspector-label">Headers at this event</h4>
+                    <p class="field-help">Named response metadata, copied at capture time.</p>
+                    <div class="headers-view">
+                        @if (snapshot.Headers.Count == 0)
+                        {
+                            <p class="muted-detail">No headers set yet.</p>
+                        }
+                        else
+                        {
+                            @foreach (var header in snapshot.Headers.OrderBy(h => h.Key, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <div class="header-row" @key="header.Key"><code>@header.Key</code><span>@header.Value</span></div>
+                            }
+                        }
+                    </div>
+                    <h4 class="inspector-label">Body at this event</h4>
+                    <p class="field-help">Returned content, not the request being sent.</p>
+                    <pre class="body-view">@(string.IsNullOrEmpty(snapshot.Body) ? "Body not written yet" : snapshot.Body)</pre>
+                    <details class="source-details" open>
+                        <summary>Where in the C# code?</summary>
+                        <p>@CodeExplanation(selected.Code)</p>
+                        <p class="field-help">Excerpt from MiddlewareExperimentRunner. Local line numbers; highlighted line captures this event.</p>
+                        <pre class="source-code"><code>@foreach (var line in CodeLines(selected.Code))
+                        {
+                            <span class="source-line @(line.IsSelected ? "source-selected" : "")"><span class="source-number">@line.Number.ToString("00")</span><span class="source-text">@line.Text</span></span>
+                        }</code></pre>
+                    </details>
+                    <div class="final-summary"><span>FINAL COMPLETED RESPONSE · RUN #@_successfulRuns</span><strong>@_current.Response.StatusCode · @(_current.Response.Headers.ContainsKey("X-Lab-Stamp") ? "stamp present" : "stamp absent") · endpoint @_current.Response.EndpointExecutionCount</strong><small>This is the final outcome. The inspector above follows your selected event.</small></div>
+                    <details class="run-identity"><summary>Execution identity</summary><code>@_current.RunId</code><p>A new successful execution gets a new ID. Selecting or replaying events keeps this ID.</p></details>
+                }
+            </aside>
+        </div>
+    </section>
+
+    <section class="comparison-section" aria-labelledby="comparison-title">
+        <div class="section-heading"><div><p class="eyebrow">COMPARE / FIND THE ORDERING EFFECT</p><h2 id="comparison-title">@ComparisonHeading</h2></div><span class="section-hint">Last two successful executions only</span></div>
+        <div class="discovery-guide"><strong>Try this next</strong><ol><li>Enable rejection. Choose <strong>Gate before stamp</strong> (G2), predict and run.</li><li>Keep rejection on. Choose <strong>Stamp before gate</strong> (S2), make fresh predictions and run.</li><li>Compare the status, stamp and traces. Which component got a chance to run?</li></ol></div>
+        @if (_previous is null || _current is null)
+        {
+            <p class="comparison-empty">@(_current is null ? "No executions to compare yet." : "One completed run. Run again to compare two real results.") No example runs are preloaded.</p>
+        }
+        else
+        {
+            <div class="comparison-grid">
+                @foreach (var entry in ComparisonEntries())
+                {
+                    var result = entry.Result;
+                    <article class="comparison-card" @key="result.RunId">
+                        <p class="compare-overline">@entry.Label · @ScenarioCode(result.Options)</p><h3>@OrderLabel(result.Options.Order)</h3><p class="compare-setting">Reject @OnOff(result.Options.RejectRequest)</p>
+                        <dl>
+                            <div><dt>Status</dt><dd>@result.Response.StatusCode</dd></div>
+                            <div><dt>Stamp header</dt><dd>@StampLabel(result.Response)</dd></div>
+                            <div><dt>Endpoint executions</dt><dd>@result.Response.EndpointExecutionCount</dd></div>
+                            <div><dt>Body</dt><dd class="compare-body">@result.Response.Body</dd></div>
+                            <div><dt>All headers</dt><dd class="compare-headers">@HeadersLabel(result.Response)</dd></div>
+                            <div><dt>Trace</dt><dd class="compare-sequence">@string.Join(" → ", result.Events.Select(e => e.Code))</dd></div>
+                        </dl>
+                        <details class="run-identity"><summary>Run ID</summary><code>@result.RunId</code></details>
+                    </article>
+                }
+            </div>
+            <div class="comparison-insight"><h3>@(IsRejectionOrderComparison ? "The checkpoint stopped both journeys. Only one was stamped first." : "What these two runs show")</h3><p>@ComparisonExplanation()</p><p><strong>Apply it:</strong> a component only affects a response if control reaches it. Place middleware according to the work and metadata it needs, then verify the actual result.</p></div>
+        }
+    </section>
+
+    <section class="learning-section" aria-labelledby="learning-title">
+        <div class="section-heading"><div><p class="eyebrow">APPLY / BUILD THE MENTAL MODEL</p><h2 id="learning-title">Go one level deeper.</h2></div><span class="section-hint">Open the notes you need</span></div>
+        <div class="learning-levels">
+            <section class="learning-level" aria-labelledby="foundation-title"><p class="level-number">01 / FOUNDATION</p><h3 id="foundation-title">Read the chain</h3><p>Connect the HTTP journey to the C# calls.</p>
+                <details>
+                    <summary>Use and awaited next</summary>
+                    <p><code>Use</code> wraps the remaining delegate chain. Code before <code>await next(request)</code> runs on entry; ordinary code after it runs on normal completion. The same <code>HttpContext</code> holds the request and the evolving response.</p>
+                    <p><strong>Check:</strong> which line makes A wait for B?</p>
+                </details>
+                <details>
+                    <summary>Terminal Run</summary>
+                    <p>The experiment's <code>ApplicationBuilder.Run</code> adds a terminal delegate: it writes a response without receiving a next delegate. <code>WebApplication.Run()</code> starts the web host instead. Neither name means this demo performs endpoint routing.</p>
+                    <p><strong>Check:</strong> can this terminal delegate continue to another component?</p>
+                </details>
+                <details>
+                    <summary>Short-circuiting and early return</summary>
+                    <p>B's rejection branch writes the 403 response and returns without next. Downstream components are skipped. Previously entered middleware can resume normally. Rejection is a deliberate response, not an exception.</p>
+                    <p><strong>Try:</strong> inspect <code>B.reject</code>, then the next actual event.</p>
+                </details>
+            </section>
+            <section class="learning-level" aria-labelledby="developer-title"><p class="level-number">02 / DEVELOPER</p><h3 id="developer-title">Debug with evidence</h3><p>Distinguish current state from the final result.</p>
+                <details>
+                    <summary>One context, copied snapshots</summary>
+                    <p>Each run shares one context but copies status, headers, body and endpoint count into each event. Earlier snapshots do not inherit later writes. A header is a named metadata value; C writes its header before recording <code>C.before</code>.</p>
+                    <p><strong>Try:</strong> select <code>A.before</code> after a completed run. Its body should still be empty.</p>
+                </details>
+                <details>
+                    <summary>Ordering dependencies</summary>
+                    <p>Middleware often needs work done by an earlier component. In a routed app, endpoint-aware authorization needs routing metadata, and authentication normally precedes authorization. There is no one universal pipeline order for every app. This lab only demonstrates two linear orders.</p>
+                    <p><strong>Debug:</strong> identify the expected component, find whether it was entered, inspect the earliest changed snapshot, then check its placement.</p>
+                </details>
+                <details>
+                    <summary>The Blazor experiment boundary</summary>
+                    <p>This Interactive Server page calls a transient runner that creates a fresh service scope and an isolated in-memory pipeline for each execution. A button click is not a new ordinary HTTP request through the site's host middleware. Replay reads saved event objects, not the runner.</p>
+                    <p><strong>Check:</strong> does the execution ID change during replay?</p>
+                </details>
+            </section>
+            <section class="learning-level" aria-labelledby="advanced-title"><p class="level-number">03 / ADVANCED</p><h3 id="advanced-title">Know the boundary</h3><p>Production concepts to study beyond this demo.</p>
+                <details>
+                    <summary>Exceptions and handler placement</summary>
+                    <p>A catch around awaited next can handle downstream failures. It cannot catch a failure occurring before control enters that handler. Uncaught exceptions skip ordinary after code. <code>A.after</code> here is not a finally block; this lab does not inject a throwing middleware.</p>
+                </details>
+                <details>
+                    <summary>Response lifecycle</summary>
+                    <p>Hosted response headers generally must be set before the response starts. Unconditionally changing headers or appending content after next can be unsafe. <code>DefaultHttpContext</code> with a <code>MemoryStream</code> does not reproduce Kestrel flushing, <code>HasStarted</code>, <code>OnStarting</code>, <code>OnCompleted</code>, content-length enforcement or client delivery.</p>
+                </details>
+                <details>
+                    <summary>Branches: Map, MapWhen, UseWhen</summary>
+                    <p><code>Map</code> and <code>MapWhen</code> create branches. A <code>UseWhen</code> branch can rejoin the main pipeline if it does not short-circuit or contain a terminal delegate. Branches are not implemented in this two-preset experiment.</p>
+                </details>
+                <details>
+                    <summary>Middleware activation and DI</summary>
+                    <p>Conventional middleware can receive per-request services as <code>InvokeAsync</code> parameters. Factory-activated <code>IMiddleware</code> supports scoped constructor dependencies. These are different activation models; Lab 03 uses inline delegates. Revisit Lab 01 for service lifetimes.</p>
+                </details>
+            </section>
+        </div>
+    </section>
+
+    <section class="interview-section" aria-labelledby="interview-title">
+        <div class="section-heading"><div><p class="eyebrow">REFLECT / EXPLAIN IT LIKE AN ENGINEER</p><h2 id="interview-title">Close the trace. Keep the reasoning.</h2></div></div>
+        <p class="section-copy">Say your answer aloud before revealing the explanation. Use an event and a line of C# as evidence.</p>
+        <div class="interview-grid">
+            @foreach (var reflection in Reflections)
+            {
+                <article><h3>@reflection.Question</h3><details><summary>Reveal an explanation</summary><p>@reflection.Answer</p></details></article>
+            }
+        </div>
+        <a class="official-source" href="https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/?view=aspnetcore-10.0" target="_blank" rel="noopener noreferrer">Continue with Microsoft Learn: ASP.NET Core middleware <span aria-hidden="true">↗</span></a>
+    </section>
+</div>
+
+@code {
+    private enum PredictionKind { Endpoint, After, Stamp }
+    private enum NodeState { Ready, Active, Waiting, Completed, Rejected, Skipped }
+    private sealed record PredictionAnswers(bool Endpoint, bool After, bool Stamp);
+    private sealed record Node(string Code, string Title, string Description);
+    private sealed record FeedbackRow(string Name, bool Predicted, bool Actual, string Explanation)
+    {
+        public bool IsCorrect => Predicted == Actual;
+        public string ShortName => Name switch
+        {
+            "Endpoint executes" => "Endpoint",
+            "A.after executes" => "A.after",
+            "Stamp exists" => "Stamp",
+            _ => Name
+        };
+    }
+    private sealed record CodeLine(int Number, string Text, bool IsSelected);
+
+    private sealed record ComponentInfo(string Code, string Title, string Analogy, string Explanation, string Effect, string Concept);
+    private sealed record Story(string What, string Why, string Change);
+    private sealed record Reflection(string Question, string Answer);
+    private sealed record ComparisonEntry(string Label, MiddlewareExperimentResult Result);
+
+    private static readonly ComponentInfo[] Components =
+    [
+        new("A", "RequestLog", "Journey record",
+            "Think of a record keeper at the first airport checkpoint. It notes when the request enters, lets the remaining components do their work, then notes when that work finishes and control returns. It does not decide whether to allow the request or change the response.",
+            "A.before captures an event code and a copy of response state. await next(request) invokes the remaining pipeline delegate and asynchronously waits for it. When it returns normally, A.after captures the resulting response state.",
+            "Record(\"A.before\"); await next(request); Record(\"A.after\");"),
+        new("B", "DemoGate", "Checkpoint", "Like a checkpoint that may stop further progress. B either continues the chain or writes a rejection and returns.", "Records B.before. If rejection is on, writes 403 and the rejection body, then records B.reject. Otherwise awaits next and records B.after.", "if (options.RejectRequest) { … return; }"),
+        new("C", "ResponseStamp", "Processing stamp", "Like a processing stamp added when this station is reached. A later stop does not undo work already done here.", "Writes X-Lab-Stamp = executed before C.before. After next completes normally, records C.after. The header is informational.", "request.Response.Headers[StampHeader] = StampValue;"),
+        new("E", "Demo endpoint", "Destination", "Like the intended destination, reached only when every earlier component passes control onward.", "Increments the execution count, writes HTTP 200 with the allowed JSON body, then records Endpoint.execute.", "Run(terminal)")
+    ];
+
+    private static readonly Reflection[] Reflections =
+    [
+        new("Why does A.after execute after B rejects?", "A already entered and awaited the downstream delegate. B returns normally after writing its rejection, so that await completes and A resumes. A.after is ordinary code, not finally; an uncaught exception would be different."),
+        new("Why can two 403 responses have different headers?", "With C before B, C writes the stamp before B rejects. With B before C, B returns without calling C. The same status describes the outcome, not every component that ran."),
+        new("What if middleware does not call next?", "It short-circuits the remaining chain. It should produce the intended response. Earlier components may resume as the call returns, but components after the stop are never entered."),
+        new("How do Use and a terminal Run differ?", "Use can wrap downstream work and call next. ApplicationBuilder.Run adds a terminal delegate with no next parameter. WebApplication.Run() is a different API that starts the host."),
+        new("Why does ordering matter in a real app?", "Components can require earlier work, such as routing metadata or an authenticated user. A short-circuit can prevent later work entirely. Choose order from those dependencies, then verify behavior."),
+        new("What does this experiment leave out?", "It runs real delegates over a synthetic DefaultHttpContext and MemoryStream. It does not model a live Kestrel request, transport flushing, endpoint routing, real authentication, authorization or distributed tracing.")
+    ];
+
+    private ElementReference _componentsHeading;
+    private ElementReference _experimentHeading;
+
+    private async Task FocusHeadingAsync(ElementReference heading)
+    {
+        // The route-qualified link owns URL/history/scroll; this only moves keyboard focus.
+        if (!_disposed) await heading.FocusAsync(preventScroll: true);
+    }
+
+    private string _componentCode = "A";
+    private ComponentInfo ActiveComponent => Components.Single(component => component.Code == _componentCode);
+    private bool _configurationChanged;
+    private long? _lastRunStarted;
+    private MiddlewareExperimentOptions? _lastStartedOptions;
+    private PredictionAnswers? _lastStartedAnswers;
+    private PipelineOrder _pendingOrder = PipelineOrder.GateBeforeStamp;
+    private bool _pendingReject;
+    private bool? _pendingEndpoint;
+    private bool? _pendingAfter;
+    private bool? _pendingStamp;
+    private MiddlewareExperimentResult? _current;
+    private MiddlewareExperimentResult? _previous;
+    private PredictionAnswers? _submitted;
+    private int _selectedIndex;
+    private int _successfulRuns;
+    private bool _executing;
+    private bool _playing;
+    private bool _disposed;
+    private CancellationTokenSource? _playbackCts;
+    private long _playbackGeneration;
+    private string _errorMessage = string.Empty;
+    private string _announcement = string.Empty;
+
+    private bool ControlsLocked => _executing || _playing;
+    private bool PredictionsComplete => _pendingEndpoint.HasValue && _pendingAfter.HasValue && _pendingStamp.HasValue;
+    private int PredictionCount => (_pendingEndpoint.HasValue ? 1 : 0) + (_pendingAfter.HasValue ? 1 : 0) + (_pendingStamp.HasValue ? 1 : 0);
+    private bool CanRun => !_disposed && !ControlsLocked && PredictionsComplete;
+    private bool HasPendingChanges => _current is not null && (_current.Options.Order != _pendingOrder || _current.Options.RejectRequest != _pendingReject);
+    private MiddlewareTraceEvent? SelectedEvent => _current is not null && _selectedIndex >= 0 && _selectedIndex < _current.Events.Count ? _current.Events[_selectedIndex] : null;
+    private int FeedbackScore => FeedbackRows().Count(f => f.IsCorrect);
+    private string FeedbackReviewLabel => FeedbackScore == 3
+        ? "Review all three explanations"
+        : $"Review {3 - FeedbackScore} incorrect {(FeedbackScore == 2 ? "answer" : "answers")} and explanations";
+
+    private string RunGuidance => _playing ? "Pause replay before changing settings or running again."
+        : _executing ? "The isolated pipeline is executing."
+        : !PredictionsComplete ? $"Run is disabled. Answer {3 - PredictionCount} remaining {(PredictionCount == 2 ? "prediction" : "predictions")} above."
+        : "Ready. Run executes a fresh isolated pipeline; replay only reads saved events.";
+    private bool IsRejectionOrderComparison => _previous is not null && _current is not null
+        && _previous.Options.RejectRequest && _current.Options.RejectRequest
+        && _previous.Options.Order != _current.Options.Order
+        && _previous.Response.StatusCode == 403 && _current.Response.StatusCode == 403
+        && _previous.Response.Body == _current.Response.Body
+        && _previous.Response.EndpointExecutionCount == 0 && _current.Response.EndpointExecutionCount == 0
+        && _previous.Response.Headers.ContainsKey("X-Lab-Stamp") != _current.Response.Headers.ContainsKey("X-Lab-Stamp");
+
+    private string ComparisonHeading
+    {
+        get
+        {
+            if (_previous is null || _current is null) return "Compare two executions.";
+            if (SameObservedBehavior(_previous, _current)) return "Same behavior. New execution.";
+            if (IsRejectionOrderComparison) return "Same rejection. Different evidence.";
+            if (_previous.Options.Order == _current.Options.Order
+                && !SameResponse(_previous.Response, _current.Response)) return "Same order. Different outcome.";
+            if (_previous.Options.Order != _current.Options.Order
+                && SameResponse(_previous.Response, _current.Response)) return "Different order. Same final result.";
+            return "Compare two executions.";
+        }
+    }
+
+    private static bool SameResponse(MiddlewareResponseSnapshot earlier, MiddlewareResponseSnapshot latest) =>
+        earlier.StatusCode == latest.StatusCode && earlier.Body == latest.Body
+        && earlier.EndpointExecutionCount == latest.EndpointExecutionCount
+        && earlier.Headers.Count == latest.Headers.Count
+        && earlier.Headers.All(header => latest.Headers.TryGetValue(header.Key, out var value) && value == header.Value);
+
+    private static bool SameObservedBehavior(MiddlewareExperimentResult earlier, MiddlewareExperimentResult latest) =>
+        SameResponse(earlier.Response, latest.Response)
+        && earlier.Events.Count == latest.Events.Count
+        && earlier.Events.Zip(latest.Events).All(pair => pair.First.Sequence == pair.Second.Sequence
+            && pair.First.Code == pair.Second.Code && SameResponse(pair.First.Snapshot, pair.Second.Snapshot));
+    private string NextEventExplanation => _current is not null && _selectedIndex + 1 < _current.Events.Count
+        ? $"{_current.Events[_selectedIndex + 1].Code}: {EventStory(_current.Events[_selectedIndex + 1].Code).What}"
+        : "No next captured event. The pipeline has completed; this snapshot is the final recorded state.";
+    private static string OnOff(bool value) => value ? "On" : "Off";
+    private static string ScenarioCode(MiddlewareExperimentOptions options) => $"{(options.Order == PipelineOrder.GateBeforeStamp ? "G" : "S")}{(options.RejectRequest ? "2" : "1")}";
+    private static string HeadersLabel(MiddlewareResponseSnapshot response) => response.Headers.Count == 0 ? "None"
+        : string.Join("; ", response.Headers.OrderBy(header => header.Key, StringComparer.OrdinalIgnoreCase).Select(header => $"{header.Key}: {header.Value}"));
+
+    private string OrderChoiceClass(PipelineOrder order) => _pendingOrder == order ? "chosen" : string.Empty;
+    private static string OrderLabel(PipelineOrder order) => order == PipelineOrder.GateBeforeStamp ? "A → B → C → Endpoint" : "A → C → B → Endpoint";
+    private static string YesNo(bool value) => value ? "Yes" : "No";
+    private static string StampLabel(MiddlewareResponseSnapshot response) => response.Headers.TryGetValue("X-Lab-Stamp", out var value) ? value : "Absent";
+    private static string StatusClass(int status) => status >= 400 ? "status-rejected" : "status-allowed";
+
+    private void SetOrder(PipelineOrder order)
+    {
+        if (ControlsLocked || _pendingOrder == order) return;
+        _pendingOrder = order;
+        ConfigurationChanged();
+    }
+
+    private void OnRejectChanged(ChangeEventArgs args)
+    {
+        if (ControlsLocked) return;
+        var reject = args.Value is true;
+        if (_pendingReject == reject) return;
+        _pendingReject = reject;
+        ConfigurationChanged();
+    }
+
+    private void ConfigurationChanged()
+    {
+        ClearPendingPredictions();
+        _configurationChanged = true;
+        _errorMessage = string.Empty;
+        _announcement = "Settings changed. Predictions cleared. Answer three fresh predictions to enable Run.";
+    }
+
+    private void ClearPendingPredictions()
+    {
+        _pendingEndpoint = null;
+        _pendingAfter = null;
+        _pendingStamp = null;
+    }
+
+    private void SetPrediction(PredictionKind kind, bool value)
+    {
+        if (ControlsLocked) return;
+        switch (kind)
+        {
+            case PredictionKind.Endpoint: _pendingEndpoint = value; break;
+            case PredictionKind.After: _pendingAfter = value; break;
+            case PredictionKind.Stamp: _pendingStamp = value; break;
+        }
+    }
+
+    private async Task RunExperimentAsync()
+    {
+        if (!CanRun) return;
+        var options = new MiddlewareExperimentOptions(_pendingReject, _pendingOrder);
+        var answers = new PredictionAnswers(_pendingEndpoint!.Value, _pendingAfter!.Value, _pendingStamp!.Value);
+        // Blazor can finish this in-memory run before the second click arrives.
+        // Coalesce an identical double-click without delaying the real runner.
+        if (_lastRunStarted is long started && options == _lastStartedOptions && answers == _lastStartedAnswers
+            && Stopwatch.GetElapsedTime(started) < TimeSpan.FromMilliseconds(600)) return;
+        _lastRunStarted = Stopwatch.GetTimestamp();
+        _lastStartedOptions = options;
+        _lastStartedAnswers = answers;
+        _executing = true;
+        _errorMessage = string.Empty;
+        _announcement = string.Empty;
+        try
+        {
+            var result = await Runner.RunAsync(options);
+            if (_disposed) return;
+            _previous = _current;
+            _current = result;
+            _submitted = answers;
+            _configurationChanged = false;
+            _selectedIndex = Math.Max(0, result.Events.Count - 1);
+            _successfulRuns++;
+            _announcement = $"Run {_successfulRuns} completed. {result.Events.Count} captured events; HTTP {result.Response.StatusCode}. {FeedbackScore} of 3 predictions correct. Expand the explanations below Run.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Lab 03 in-memory middleware experiment failed");
+            if (!_disposed) _errorMessage = "The in-memory runner encountered an unexpected error.";
+        }
+        finally
+        {
+            _executing = false;
+        }
+    }
+
+    private void PausePlayback()
+    {
+        if (!_playing && _playbackCts is null) return;
+        ++_playbackGeneration;
+        _playing = false;
+        var source = _playbackCts;
+        _playbackCts = null;
+        source?.Cancel();
+        // The awaited playback task owns disposing its CancellationTokenSource.
+    }
+
+    private Task TogglePlaybackAsync()
+    {
+        if (_playing)
+        {
+            PausePlayback();
+            return Task.CompletedTask;
+        }
+        return PlayAsync();
+    }
+
+    private async Task PlayAsync()
+    {
+        if (_disposed || _executing || _playing || _current is null || _current.Events.Count == 0) return;
+        if (_selectedIndex == _current.Events.Count - 1) _selectedIndex = 0;
+        var source = new CancellationTokenSource();
+        var generation = ++_playbackGeneration;
+        _playbackCts = source;
+        _playing = true;
+        try
+        {
+            while (!_disposed && _playing && generation == _playbackGeneration && _current is not null && _selectedIndex < _current.Events.Count - 1)
+            {
+                await Task.Delay(500, source.Token);
+                if (_disposed || source.IsCancellationRequested || generation != _playbackGeneration) break;
+                _selectedIndex++;
+                await InvokeAsync(() => { if (!_disposed) StateHasChanged(); });
+            }
+        }
+        catch (OperationCanceledException) when (source.IsCancellationRequested)
+        {
+            // Pause, reset and disposal are expected cancellation paths.
+        }
+        finally
+        {
+            if (generation == _playbackGeneration)
+            {
+                _playing = false;
+                if (ReferenceEquals(_playbackCts, source)) _playbackCts = null;
+                if (!_disposed) await InvokeAsync(() => { if (!_disposed) StateHasChanged(); });
+            }
+            source.Dispose();
+        }
+    }
+
+    private void PreviousEvent()
+    {
+        if (_current is null) return;
+        PausePlayback();
+        _selectedIndex = Math.Max(0, _selectedIndex - 1);
+    }
+
+    private void NextEvent()
+    {
+        if (_current is null) return;
+        PausePlayback();
+        _selectedIndex = Math.Min(_current.Events.Count - 1, _selectedIndex + 1);
+    }
+
+    private void RestartReplay()
+    {
+        if (_executing || _current is null) return;
+        PausePlayback();
+        _selectedIndex = 0;
+    }
+
+    private void SelectEvent(int index)
+    {
+        if (_current is null || index < 0 || index >= _current.Events.Count) return;
+        PausePlayback();
+        _selectedIndex = index;
+    }
+
+    private void ResetExperiment()
+    {
+        if (_disposed || _executing) return;
+        PausePlayback();
+        _pendingOrder = PipelineOrder.GateBeforeStamp;
+        _pendingReject = false;
+        ClearPendingPredictions();
+        _current = null;
+        _previous = null;
+        _submitted = null;
+        _selectedIndex = 0;
+        _successfulRuns = 0;
+        _lastRunStarted = null;
+        _lastStartedOptions = null;
+        _lastStartedAnswers = null;
+        _configurationChanged = false;
+        _componentCode = "A";
+        _errorMessage = string.Empty;
+        _announcement = "Experiment reset. Choose your predictions before running.";
+    }
+
+    private IEnumerable<Node> ExecutedNodes()
+    {
+        yield return new Node("A", "RequestLog", "Outer observer · always first");
+        if (_current?.Options.Order == PipelineOrder.StampBeforeGate)
+        {
+            yield return new Node("C", "ResponseStamp", "Sets X-Lab-Stamp on entry");
+            yield return new Node("B", "DemoGate", "May return 403 without next");
+        }
+        else
+        {
+            yield return new Node("B", "DemoGate", "May return 403 without next");
+            yield return new Node("C", "ResponseStamp", "Sets X-Lab-Stamp on entry");
+        }
+        yield return new Node("Endpoint", "Demo endpoint", "Writes allowed response if reached");
+    }
+
+    private NodeState GetNodeState(string nodeCode)
+    {
+        if (_current is null || SelectedEvent is null) return NodeState.Ready;
+        var prefix = _current.Events.Take(_selectedIndex + 1).Select(item => item.Code).ToHashSet(StringComparer.Ordinal);
+        if (nodeCode == "Endpoint")
+        {
+            if (prefix.Contains("Endpoint.execute")) return NodeState.Completed;
+            return prefix.Contains("B.reject") ? NodeState.Skipped : NodeState.Ready;
+        }
+        if (prefix.Contains($"{nodeCode}.reject")) return NodeState.Rejected;
+        if (prefix.Contains($"{nodeCode}.after")) return NodeState.Completed;
+        if (prefix.Contains($"{nodeCode}.before"))
+            return SelectedEvent.Code == $"{nodeCode}.before" ? NodeState.Active : NodeState.Waiting;
+        return prefix.Contains("B.reject") ? NodeState.Skipped : NodeState.Ready;
+    }
+
+    private static string NodeCss(NodeState state) => state switch
+    {
+        NodeState.Active => "node-active", NodeState.Waiting => "node-waiting",
+        NodeState.Completed => "node-completed", NodeState.Rejected => "node-rejected",
+        NodeState.Skipped => "node-skipped", _ => "node-ready"
+    };
+    private static string StateLabel(NodeState state) => state switch
+    {
+        NodeState.Active => "Active", NodeState.Waiting => "Waiting at next",
+        NodeState.Completed => "Completed", NodeState.Rejected => "Rejected",
+        NodeState.Skipped => "Skipped", _ => "Ready"
+    };
+    private int EventDepth(string code)
+    {
+        // Project only recorded events onto the stored executed order, never pending controls.
+        var component = code.Split('.')[0];
+        var depth = 0;
+        foreach (var node in ExecutedNodes())
+        {
+            if (node.Code == component) return depth;
+            depth++;
+        }
+        return 0;
+    }
+
+    private static string EventDirection(string code) => code switch
+    {
+        "B.reject" => "×",
+        "Endpoint.execute" => "■",
+        _ => code.EndsWith(".after", StringComparison.Ordinal) ? "←" : "→"
+    };
+
+    private static string EventPhase(string code) => code.EndsWith(".before", StringComparison.Ordinal) ? "Enter" : code.EndsWith(".after", StringComparison.Ordinal) ? "Resume" : code == "B.reject" ? "Short-circuit" : "Terminal";
+    private string EventCss(int index, string code)
+    {
+        var selected = index == _selectedIndex ? "event-selected" : string.Empty;
+        var future = index > _selectedIndex ? "event-future" : string.Empty;
+        var phase = code == "B.reject" ? "event-reject" : code.EndsWith(".after", StringComparison.Ordinal) ? "event-return" : "event-forward";
+        return $"{selected} {future} {phase}";
+    }
+
+    private IEnumerable<FeedbackRow> FeedbackRows()
+    {
+        if (_submitted is null || _current is null) yield break;
+        var rejected = _current.Events.Any(item => item.Code == "B.reject");
+        var stampWritten = _current.Events.Any(item => item.Code == "C.before");
+        yield return new("Endpoint executes", _submitted.Endpoint, _current.Response.EndpointExecutionCount > 0,
+            rejected ? "B wrote the rejection and returned without next. The trace contains no Endpoint.execute; the final execution count is 0."
+                : "B called next. The trace reaches Endpoint.execute, where the terminal delegate writes the allowed response and increments the count to 1.");
+        yield return new("A.after executes", _submitted.After, _current.Events.Any(item => item.Code == "A.after"),
+            rejected ? "A had already entered and awaited B's chain. B rejected but returned normally, so A resumed and recorded A.after. Short-circuiting skips downstream work, not an entered caller's normal return."
+                : "The downstream chain completed normally. A's awaited next returned, so its final Record call captured A.after.");
+        yield return new("Stamp exists", _submitted.Stamp, _current.Response.Headers.ContainsKey("X-Lab-Stamp"),
+            stampWritten ? "C.before is present: C wrote the header before recording entry. Later middleware did not remove it, so the completed response keeps the stamp."
+                : "There is no C.before event. B rejected before C was entered, so C never wrote a stamp header.");
+    }
+
+    private IEnumerable<ComparisonEntry> ComparisonEntries()
+    {
+        if (_previous is null || _current is null) yield break;
+        yield return new($"Previous run #{_successfulRuns - 1}", _previous);
+        yield return new($"Current run #{_successfulRuns}", _current);
+    }
+
+    private Story EventStory(string code) => code switch
+    {
+        "A.before" => new("The record keeper noted that this request entered the pipeline.", "A is first. After recording entry, it can pass control to the remaining chain.", "No response values changed. A captured the initial status, headers, body and endpoint count."),
+        "A.after" => new("The record keeper noted that the remaining work had returned.", "A's awaited next completed normally. A can resume even when B deliberately returned a rejection.", "A only records state. It does not change the response. This is the last captured event."),
+        "B.before" => new("DemoGate recorded entry before checking rejection.", _current?.Options.Order == PipelineOrder.GateBeforeStamp ? "A called next and B is the next registered component." : "C wrote its stamp and called next; B is next in this executed order.", "B has not made its decision yet. This snapshot still reflects work done before the check."),
+        "B.reject" => new("DemoGate wrote a rejection and stopped the downstream journey.", "This executed run has rejection enabled. B takes its return branch without calling next.", "Status is now 403, Content-Type is JSON, and the rejection body is written. The endpoint count remains 0. Existing headers are kept."),
+        "B.after" => new("DemoGate resumed after its downstream chain completed.", "B allowed the request and awaited next. That delegate has now returned normally.", "This Record call copies the response as it stands; B does not change it here."),
+        "C.before" => new("ResponseStamp wrote its header, then recorded entry.", _current?.Options.Order == PipelineOrder.StampBeforeGate ? "C is before B in the executed order, so it is entered before the gate's decision." : "B allowed the request and called next, reaching C.", "The headers now contain X-Lab-Stamp: executed. C has not written a body or incremented the endpoint count."),
+        "C.after" => new("ResponseStamp resumed after next returned.", "C was entered earlier and its downstream delegate completed normally. A deliberate rejection also returns normally.", "C does not write again here. Its snapshot preserves the downstream outcome and the header it set on entry."),
+        "Endpoint.execute" => new("The terminal delegate handled the request.", "Every earlier component passed control onward, so the destination was reached.", "Endpoint count becomes 1. Status is 200, Content-Type is JSON, and the allowed response body has been written."),
+        _ => new("Select a captured event.", "The story follows the stored event sequence.", "No event selected.")
+    };
+
+    private string ComparisonExplanation()
+    {
+        if (_previous is null || _current is null) return string.Empty;
+        if (SameObservedBehavior(_previous, _current))
+            return "No behavior changed between these runs. Their final response, captured sequence and event snapshots match. Each run still has its own execution ID.";
+        if (IsRejectionOrderComparison)
+            return "Both runs rejected the request with HTTP 403, the same body and zero endpoint executions. C wrote the stamp before B rejected in the stamp-first run. In the gate-first run B returned before C was entered. The recorded headers and traces show that difference.";
+        if (_previous.Options.Order == _current.Options.Order)
+            return "The completed responses differ. Both runs used the same component order. One trace reached Endpoint.execute; the other recorded B.reject and skipped the endpoint. The changed gate decision produced a different completed response.";
+        if (SameResponse(_previous.Response, _current.Response))
+            return "The final status, headers, body and endpoint count match. B and C enter and resume in different positions, so their captured traces and intermediate snapshots differ.";
+        return "The completed responses differ. Both the order and gate decision changed. Compare the actual status, headers, body, endpoint count and trace before attributing the difference to either setting alone.";
+    }
+
+    private static string CodeExplanation(string code) => code switch
+    {
+        "A.before" => "A records before calling downstream middleware.",
+        "A.after" => "A resumes after its awaited downstream delegate completes.",
+        "B.before" => "B records entry before evaluating the reject switch.",
+        "B.reject" => "B records rejection and returns. It never calls next on this branch.",
+        "B.after" => "B records after its downstream delegate completes normally.",
+        "C.before" => "C sets the header first, then records the resulting snapshot.",
+        "C.after" => "C resumes after its downstream delegate completes normally.",
+        "Endpoint.execute" => "The terminal delegate writes the response and captures it.",
+        _ => "Select an event to inspect its source."
+    };
+
+    private static IReadOnlyList<CodeLine> CodeLines(string code)
+    {
+        var section = code.Split('.')[0];
+        var text = section switch
+        {
+            "A" => new[] { "Record(\"A.before\");", "await next(request);", "Record(\"A.after\");" },
+            "B" => new[] { "Record(\"B.before\");", "if (options.RejectRequest)", "{", "    request.Response.StatusCode = StatusCodes.Status403Forbidden;", "    request.Response.ContentType = JsonContentType;", "    await request.Response.WriteAsync(RejectedBody);", "    Record(\"B.reject\");", "    return;", "}", "await next(request);", "Record(\"B.after\");" },
+            "C" => new[] { "request.Response.Headers[StampHeader] = StampValue;", "Record(\"C.before\");", "await next(request);", "Record(\"C.after\");" },
+            _ => new[] { "endpointExecutionCount++;", "request.Response.StatusCode = StatusCodes.Status200OK;", "request.Response.ContentType = JsonContentType;", "await request.Response.WriteAsync(AllowedBody);", "Record(\"Endpoint.execute\");" }
+        };
+        var selectedLine = code switch
+        {
+            "A.before" => 1, "A.after" => 3, "B.before" => 1, "B.reject" => 7,
+            "B.after" => 11, "C.before" => 2, "C.after" => 4, "Endpoint.execute" => 5, _ => 1
+        };
+        return text.Select((line, i) => new CodeLine(i + 1, line, i + 1 == selectedLine)).ToArray();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        PausePlayback();
+    }
+}
