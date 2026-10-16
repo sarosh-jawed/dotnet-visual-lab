@@ -4,19 +4,31 @@ Interactive .NET experiments that make runtime behavior and design patterns visi
 
 DotNetScope is a learning-first portfolio project. Each lab focuses on one concept, asks the learner to predict what will happen, executes real .NET code, and then visualizes the actual result. The goal is to replace memorized definitions with observable behavior.
 
+Read the [documentation index](docs/README.md) or follow the individual lab guides for implementation details and screenshots.
+
 ## Visual preview
 
 ### Lab 01 - Dependency Injection Lifetimes
+
+[Read the Lab 01 guide](docs/lab01/README.md)
 
 [![Lab 01 - Dependency Injection Lifetimes](docs/images/lab01-overview.png)](docs/images/lab01-overview.png)
 
 ### Lab 02 - Strategy Pattern: Document Export Router
 
+[Read the Lab 02 guide](docs/lab02/README.md)
+
 [![Lab 02 - Strategy Pattern](docs/images/lab02-overview.png)](docs/images/lab02-overview.png)
 
-The Lab 02 page is intentionally longer because it includes the live routing pipeline, prediction feedback, before/after design comparison, and the Open/Closed proof. A full-resolution capture can be kept separately and linked rather than squeezed into the README:
+The Lab 02 page is intentionally longer because it includes the live routing pipeline, prediction feedback, before/after design comparison, and the Open/Closed proof. The full-resolution Lab 02 page capture is available separately:
 
 [Open the full Lab 02 page capture](docs/images/lab02-full.png)
+
+### Lab 03 - Middleware Flight Recorder
+
+[![Lab 03 - Middleware Flight Recorder](docs/lab03/screenshots/lab03-01-hero-overview.png)](docs/lab03/screenshots/lab03-01-hero-overview.png)
+
+[Read the Lab 03 guide, experiment scenarios, and screenshots](docs/lab03/README.md)
 
 ## Lab 01 - Dependency Injection Lifetimes
 
@@ -94,6 +106,20 @@ The test project defines a third `FakeExportStrategy` that production code does 
 - duplicate format registration failing fast
 - test-only third-strategy extensibility
 
+## Lab 03 - Middleware Flight Recorder
+
+Lab 03 makes ASP.NET Core middleware order, short-circuiting, and the return path observable in an isolated in-memory experiment. The interactive lesson uses an airport checkpoint analogy and executes real .NET delegates against a synthetic request.
+
+The four responsibilities are RequestLog (A), DemoGate (B), ResponseStamp (C), and a terminal demo endpoint (E). You can choose either `A -> B -> C -> Endpoint` or `A -> C -> B -> Endpoint`, then enable or disable a deliberate HTTP 403 rejection at DemoGate.
+
+Before executing, predict whether the endpoint will run, whether `A.after` will run, and whether the final response will contain `X-Lab-Stamp`. After execution, inspect the captured events, response status, body, headers, and C# excerpts. Replay saved events or compare two completed runs without triggering extra requests.
+
+The key comparison is G2 versus S2. Both respond with HTTP 403 and do not reach the endpoint. Only S2 retains the informational stamp header because C runs before B rejects.
+
+The lab also includes beginner explanations, deeper technical notes, reflection questions, and six dedicated middleware tests. **The pipeline is synthetic and in memory. It does not trace live Kestrel traffic or implement production security.**
+
+[Open the full Lab 03 guide](docs/lab03/README.md) | [View the G2 versus S2 comparison](docs/lab03/screenshots/lab03-06-comparison-panel.png)
+
 ## Why this exists
 
 Reading framework APIs and design-pattern definitions is easier than building a durable mental model of what the runtime is actually doing.
@@ -131,11 +157,12 @@ dotnet run --project src\DotNetVisualLab.Web
 Then open:
 
 - `/` for Lab 01
-- `/strategy` for Lab 02
+- /strategy for Lab 02
+- /middleware for Lab 03
 
 ## Validation
 
-The project currently has 13 passing automated tests across Lab 01 and Lab 02.
+The October 16, 2026 Lab 03 merge has 19 passing automated tests across Labs 01, 02, and 03 (including six focused middleware tests). The main-branch GitHub Actions workflow also passed for the merge.
 
 The delivery gate for each lab is:
 
@@ -173,7 +200,7 @@ Every push to `main` and every pull request targeting `main` runs:
 This provides an independent validation gate outside the developer machine.
 
 
-## Docker - Verified Local Run
+## Docker - Local Run
 
 Prerequisites: Docker Desktop with the Linux engine running.
 
@@ -196,12 +223,13 @@ docker logs dotnet-visual-lab-verify --tail 30
 Expected: HTTP 200 and Healthy before and after restart.
 
 Open:
-- http://localhost:8085/ — Dependency Injection lab
-- http://localhost:8085/strategy — Strategy Pattern lab
+- http://localhost:8085/  -  Dependency Injection lab
+- http://localhost:8085/strategy - Strategy Pattern lab
+- http://localhost:8085/middleware - Middleware Flight Recorder lab
 
 Port 8085 is on the host; port 8080 is inside the container.
 
-This verifies a reproducible local Docker run, not cloud hosting or production readiness. Production deployment would require explicit HTTPS configuration, persistent and protected ASP.NET Core Data Protection keys, secure secrets management, and operational controls. Do not include credentials or secrets in the image or repository.
+These commands document local Docker verification. Docker was verified before Lab 03; the new Lab 03 Docker route is documented here but has not been separately reverified after the merge. This is not cloud hosting or production readiness. Production deployment would require explicit HTTPS configuration, persistent and protected ASP.NET Core Data Protection keys, secure secrets management, and operational controls. Do not include credentials or secrets in the image or repository.
 
 When finished:
 
@@ -213,9 +241,9 @@ docker rm dotnet-visual-lab-verify
 
 ## Roadmap
 
-- Lab 01: Dependency Injection lifetimes
-- Lab 02: Strategy Pattern / document export routing
-- Lab 03: Middleware pipeline ordering
+- Lab 01: Dependency Injection lifetimes (complete)
+- Lab 02: Strategy Pattern / document export routing (complete)
+- Lab 03: Middleware Flight Recorder (complete)
 - Lab 04: Async/await execution flow
 - Lab 05: EF Core tracking vs no-tracking
 - Lab 06: Caching behavior
