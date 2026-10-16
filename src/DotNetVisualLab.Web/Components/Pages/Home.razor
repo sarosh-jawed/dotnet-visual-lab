@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @using DotNetVisualLab.Web.Labs.DependencyInjection
 @inject LifetimeExperimentRunner Runner
 
@@ -12,6 +12,11 @@
         </a>
 
         <div class="topbar-actions">
+            <nav class="lab-nav" aria-label="Lab navigation">
+                <a class="lab-nav-link active" href="/" aria-current="page">Lab 01</a>
+                <a class="lab-nav-link" href="/strategy">Lab 02</a>
+                <a class="lab-nav-link" href="/middleware">Lab 03</a>
+            </nav>
             <span class="tech-pill">.NET 10</span>
             <a class="repo-link"
                href="https://github.com/sarosh-jawed/dotnet-visual-lab"
